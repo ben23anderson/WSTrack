@@ -4,6 +4,11 @@ import cors from 'cors';
 import session from 'express-session';
 import { config } from './config.js';
 import healthRouter from './routes/health.js';
+import authRouter from './routes/auth.js';
+import divisionsRouter from './routes/divisions.js';
+import teamsRouter from './routes/teams.js';
+import membershipsRouter from './routes/memberships.js';
+import invitesRouter from './routes/invites.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -29,6 +34,11 @@ export function createApp(): express.Application {
   }));
 
   app.use('/api', healthRouter);
+  app.use('/api/auth', authRouter);
+  app.use('/api/divisions', divisionsRouter);
+  app.use('/api/teams', teamsRouter);
+  app.use('/api/teams/:teamId', membershipsRouter);
+  app.use('/api/invites', invitesRouter);
 
   return app;
 }
