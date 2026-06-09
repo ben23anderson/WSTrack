@@ -1,0 +1,443 @@
+// To use SQLite instead of PostgreSQL, change provider to "sqlite"
+// and update DATABASE_URL to "file:./dev.db"
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── Core config ───────────────────────────────────────────────────────────────
+
+model League {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  divisions Division[]
+  users     UserLeague[]
+}
+
+model Division {
+  id        String    @id @default(cuid())
+  leagueId  String
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  league          League           @relation(fields: [leagueId], references: [id])
+  teams           Team[]
+  raceDays        RaceDay[]
+  memberships     Membership[]
+  distances       Distance[]
+  classifications Classification[]
+}
+
+// ─── Auth / users ──────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  leagues          UserLeague[]
+  memberships      Membership[]
+  officialTapes    OfficialTape[]
+  primaryRaceDays  RaceDay[]         @relation("PrimaryOfficial")
+  raceDayOfficials RaceDayOfficial[]
+}
+
+model UserLeague {
+  userId   String
+  leagueId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  league League @relation(fields: [leagueId], references: [id])
+
+  @@id([userId, leagueId])
+}
+
+// role: 'coordinator' | 'head_coach' | 'assistant_coach' | 'official'
+// permissions (assistant_coach only): { roster: bool, boat_inventory: bool, boat_assignments: bool }
+model Membership {
+  id          String    @id @default(cuid())
+  userId      String
+  role        String
+  teamId      String?
+  divisionId  String?
+  permissions Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id])
+  team     Team?     @relation(fields: [teamId], references: [id])
+  division Division? @relation(fields: [divisionId], references: [id])
+
+  @@unique([userId, role, teamId, divisionId])
+}
+
+// ─── Config tables (never hard-coded enums) ────────────────────────────────────
+
+model Distance {
+  id         String   @id @default(cuid())
+  divisionId String
+  label      String   // e.g. "2K", "250M Sprint"
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  division         Division          @relation(fields: [divisionId], references: [id])
+  races            Race[]
+  athleteBestTimes AthleteBestTime[]
+}
+
+model Classification {
+  id         String   @id @default(cuid())
+  divisionId String
+  label      String   // e.g. "JV Boys", "Varsity Girls", "Open Doubles"
+  isDoubles  Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  division Division @relation(fields: [divisionId], references: [id])
+  races    Race[]
+}
+
+// ─── Teams / athletes / boats ──────────────────────────────────────────────────
+
+model Team {
+  id         String    @id @default(cuid())
+  divisionId String
+  name       String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  division      Division     @relation(fields: [divisionId], references: [id])
+  athletes      Athlete[]
+  boats         Boat[]
+  memberships   Membership[]
+  lineups       Lineup[]
+  boatLoansFrom BoatLoan[]   @relation("LoanFromTeam")
+  boatLoansTo   BoatLoan[]   @relation("LoanToTeam")
+  substitutions Substitution[]
+  scratches     Scratch[]
+}
+
+model Athlete {
+  id        String    @id @default(cuid())
+  teamId    String
+  name      String
+  grade     String?
+  photoUrl  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  team          Team              @relation(fields: [teamId], references: [id])
+  bestTimes     AthleteBestTime[]
+  lineupEntries LineupEntry[]
+  subOut        Substitution[]    @relation("SubOut")
+  subIn         Substitution[]    @relation("SubIn")
+  scratches     Scratch[]
+}
+
+model AthleteBestTime {
+  id         String   @id @default(cuid())
+  athleteId  String
+  distanceId String
+  timeMs     Int
+  isOfficial Boolean  @default(true)
+  recordedAt DateTime @default(now())
+
+  athlete  Athlete  @relation(fields: [athleteId], references: [id])
+  distance Distance @relation(fields: [distanceId], references: [id])
+
+  @@unique([athleteId, distanceId])
+}
+
+// Boats sort by (modelRank, numberRank)
+model Boat {
+  id         String    @id @default(cuid())
+  teamId     String
+  number     String
+  model      String?
+  isDouble   Boolean   @default(false)
+  modelRank  Int       @default(0)
+  numberRank Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  team            Team             @relation(fields: [teamId], references: [id])
+  boatAssignments BoatAssignment[]
+  loansAsBoat     BoatLoan[]
+}
+
+model BoatLoan {
+  id         String   @id @default(cuid())
+  boatId     String
+  fromTeamId String
+  toTeamId   String
+  raceId     String
+  createdAt  DateTime @default(now())
+
+  boat     Boat   @relation(fields: [boatId], references: [id])
+  fromTeam Team   @relation("LoanFromTeam", fields: [fromTeamId], references: [id])
+  toTeam   Team   @relation("LoanToTeam", fields: [toTeamId], references: [id])
+  race     Race   @relation(fields: [raceId], references: [id])
+
+  @@unique([boatId, raceId])
+}
+
+// ─── Race days / races ─────────────────────────────────────────────────────────
+
+model RaceDay {
+  id                String    @id @default(cuid())
+  divisionId        String
+  name              String
+  date              DateTime  @db.Date
+  primaryOfficialId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  division        Division          @relation(fields: [divisionId], references: [id])
+  primaryOfficial User?             @relation("PrimaryOfficial", fields: [primaryOfficialId], references: [id])
+  officials       RaceDayOfficial[]
+  races           Race[]
+}
+
+model RaceDayOfficial {
+  raceDayId String
+  userId    String
+
+  raceDay RaceDay @relation(fields: [raceDayId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@id([raceDayId, userId])
+}
+
+// status: setup | boat_prep | seeded | live | review | published
+// advancementRule JSON e.g. { type: "top_n_per_heat_plus_fastest", top_n_per_heat: 2, additional_fastest: 2 }
+model Race {
+  id               String    @id @default(cuid())
+  raceDayId        String
+  classificationId String
+  distanceId       String
+  laneCount        Int       @default(8)
+  orderIndex       Int
+  hasFinals        Boolean   @default(true)
+  finalBEnabled    Boolean   @default(false)
+  advancementRule  Json?
+  finalBRule       Json?
+  status           String    @default("setup")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  raceDay         RaceDay          @relation(fields: [raceDayId], references: [id])
+  classification  Classification   @relation(fields: [classificationId], references: [id])
+  distance        Distance         @relation(fields: [distanceId], references: [id])
+  lineups         Lineup[]
+  boatAssignments BoatAssignment[]
+  heats           Heat[]
+  finals          Final[]
+  substitutions   Substitution[]
+  scratches       Scratch[]
+  boatLoans       BoatLoan[]
+}
+
+// ─── Lineups / entries ─────────────────────────────────────────────────────────
+
+model Lineup {
+  id        String   @id @default(cuid())
+  teamId    String
+  raceId    String
+  submitted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team    Team         @relation(fields: [teamId], references: [id])
+  race    Race         @relation(fields: [raceId], references: [id])
+  entries LineupEntry[]
+
+  @@unique([teamId, raceId])
+}
+
+// pairId links two LineupEntry rows that form a doubles pair
+model LineupEntry {
+  id        String  @id @default(cuid())
+  lineupId  String
+  athleteId String
+  pairId    String?
+
+  lineup  Lineup  @relation(fields: [lineupId], references: [id])
+  athlete Athlete @relation(fields: [athleteId], references: [id])
+
+  boatAssignments BoatAssignment[]
+  laneAssignments LaneAssignment[]
+  finishEvents    FinishEvent[]
+  results         Result[]
+}
+
+// status: pending | approved | rejected
+model Substitution {
+  id           String   @id @default(cuid())
+  raceId       String
+  teamId       String
+  outAthleteId String
+  inAthleteId  String
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  race       Race    @relation(fields: [raceId], references: [id])
+  team       Team    @relation(fields: [teamId], references: [id])
+  outAthlete Athlete @relation("SubOut", fields: [outAthleteId], references: [id])
+  inAthlete  Athlete @relation("SubIn", fields: [inAthleteId], references: [id])
+}
+
+model Scratch {
+  id        String   @id @default(cuid())
+  raceId    String
+  teamId    String
+  athleteId String
+  createdAt DateTime @default(now())
+
+  race    Race    @relation(fields: [raceId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+  athlete Athlete @relation(fields: [athleteId], references: [id])
+
+  @@unique([raceId, athleteId])
+}
+
+// ─── Boat assignments ──────────────────────────────────────────────────────────
+
+model BoatAssignment {
+  id                String   @id @default(cuid())
+  raceId            String
+  entryId           String
+  boatId            String
+  isFinalAssignment Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  race  Race        @relation(fields: [raceId], references: [id])
+  entry LineupEntry @relation(fields: [entryId], references: [id])
+  boat  Boat        @relation(fields: [boatId], references: [id])
+
+  @@unique([raceId, entryId])
+}
+
+// ─── Heats / finals / lanes ────────────────────────────────────────────────────
+
+model Heat {
+  id         String    @id @default(cuid())
+  raceId     String
+  heatNumber Int
+  startTs    DateTime?
+  createdAt  DateTime  @default(now())
+
+  race            Race             @relation(fields: [raceId], references: [id])
+  laneAssignments LaneAssignment[]
+  officialTapes   OfficialTape[]
+  results         Result[]
+
+  @@unique([raceId, heatNumber])
+}
+
+model Final {
+  id        String    @id @default(cuid())
+  raceId    String
+  type      String    // 'A' | 'B'
+  startTs   DateTime?
+  createdAt DateTime  @default(now())
+
+  race            Race             @relation(fields: [raceId], references: [id])
+  laneAssignments LaneAssignment[]
+  officialTapes   OfficialTape[]
+  results         Result[]
+
+  @@unique([raceId, type])
+}
+
+model LaneAssignment {
+  id      String  @id @default(cuid())
+  heatId  String?
+  finalId String?
+  lane    Int
+  entryId String
+
+  heat  Heat?       @relation(fields: [heatId], references: [id])
+  final Final?      @relation(fields: [finalId], references: [id])
+  entry LineupEntry @relation(fields: [entryId], references: [id])
+}
+
+// ─── Live officiating ──────────────────────────────────────────────────────────
+
+model OfficialTape {
+  id         String   @id @default(cuid())
+  officialId String
+  heatId     String?
+  finalId    String?
+  createdAt  DateTime @default(now())
+
+  official     User          @relation(fields: [officialId], references: [id])
+  heat         Heat?         @relation(fields: [heatId], references: [id])
+  final        Final?        @relation(fields: [finalId], references: [id])
+  finishEvents FinishEvent[]
+}
+
+model FinishEvent {
+  id               String   @id @default(cuid())
+  tapeId           String
+  entryId          String?
+  boatNumber       String?
+  clientFinishTs   BigInt
+  serverReceivedTs DateTime @default(now())
+  sequence         Int
+  createdAt        DateTime @default(now())
+
+  tape           OfficialTape  @relation(fields: [tapeId], references: [id])
+  entry          LineupEntry?  @relation(fields: [entryId], references: [id])
+  disagreeEvents DisagreeEvent[]
+}
+
+model DisagreeEvent {
+  id            String   @id @default(cuid())
+  finishEventId String
+  officialId    String
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  finishEvent FinishEvent @relation(fields: [finishEventId], references: [id])
+}
+
+// ─── Results ───────────────────────────────────────────────────────────────────
+
+// status: ok | dns | dnf | dq
+// isFinal: true when this is the official season-standing result (from finals)
+model Result {
+  id        String   @id @default(cuid())
+  entryId   String
+  heatId    String?
+  finalId   String?
+  place     Int?
+  timeMs    Int?
+  status    String   @default("ok")
+  isFinal   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entry LineupEntry @relation(fields: [entryId], references: [id])
+  heat  Heat?       @relation(fields: [heatId], references: [id])
+  final Final?      @relation(fields: [finalId], references: [id])
+}
