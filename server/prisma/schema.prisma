@@ -36,6 +36,7 @@ model Division {
   memberships     Membership[]
   distances       Distance[]
   classifications Classification[]
+  invites         Invite[]
 }
 
 // ─── Auth / users ──────────────────────────────────────────────────────────────
@@ -130,6 +131,7 @@ model Team {
   boatLoansTo   BoatLoan[]   @relation("LoanToTeam")
   substitutions Substitution[]
   scratches     Scratch[]
+  invites       Invite[]
 }
 
 model Athlete {
@@ -440,4 +442,22 @@ model Result {
   entry LineupEntry @relation(fields: [entryId], references: [id])
   heat  Heat?       @relation(fields: [heatId], references: [id])
   final Final?      @relation(fields: [finalId], references: [id])
+}
+
+// ─── Invites ───────────────────────────────────────────────────────────────────
+
+model Invite {
+  id         String    @id @default(cuid())
+  token      String    @unique @default(cuid())
+  email      String
+  role       String
+  teamId     String?
+  divisionId String?
+  permissions Json?
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  team     Team?     @relation(fields: [teamId], references: [id])
+  division Division? @relation(fields: [divisionId], references: [id])
 }
