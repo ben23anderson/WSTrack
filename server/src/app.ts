@@ -22,6 +22,7 @@ import broughtBoatsRouter from './routes/broughtBoats.js';
 import boatAssignmentsRouter from './routes/boatAssignments.js';
 import boatLoansRouter from './routes/boatLoans.js';
 import seedingRouter from './routes/seeding.js';
+import finalsRouter from './routes/finals.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -59,6 +60,7 @@ export function createApp(): express.Application {
   app.use('/api/races/:raceId/boat-assignments', boatAssignmentsRouter);
   app.use('/api/races/:raceId/boat-loans', boatLoansRouter);
   app.use('/api/races/:raceId', seedingRouter);
+  app.use('/api/races/:raceId', finalsRouter);
 
   return app;
 }

@@ -17,6 +17,9 @@ import BoatPrepPage from './pages/BoatPrepPage.js';
 import HeatSheetPage from './pages/HeatSheetPage.js';
 import OfficiatingPage from './pages/OfficiatingPage.js';
 import LiveViewPage from './pages/LiveViewPage.js';
+import ReviewPage from './pages/ReviewPage.js';
+import RaceResultsPage from './pages/RaceResultsPage.js';
+import FinalsPage from './pages/FinalsPage.js';
 
 export default function App() {
   return (
@@ -126,6 +129,30 @@ export default function App() {
           element={
             <ProtectedRoute>
               <LiveViewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/heats/:heatId/review"
+          element={
+            <ProtectedRoute>
+              <ReviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/races/:raceId/results"
+          element={
+            <ProtectedRoute>
+              <RaceResultsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/races/:raceId/finals"
+          element={
+            <ProtectedRoute>
+              <FinalsPage />
             </ProtectedRoute>
           }
         />

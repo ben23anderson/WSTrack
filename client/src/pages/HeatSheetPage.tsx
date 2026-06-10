@@ -40,6 +40,14 @@ function HeatCard({ heat, centerLane, raceId, isOfficial }: HeatCardProps) {
               Officiate
             </Link>
           )}
+          {isOfficial && (
+            <Link
+              to={`/heats/${heat.id}/review`}
+              className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg px-2 py-1 font-medium border border-amber-300"
+            >
+              Review
+            </Link>
+          )}
           <Link
             to={`/heats/${heat.id}/live?raceId=${raceId}`}
             className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2 py-1 font-medium border border-gray-300"

@@ -69,6 +69,27 @@ export function createSocketServer(
       void socket.leave(`heat:${heatId}`);
     });
 
+    // Join a race room (for race:published broadcasts)
+    socket.on('race:join', async ({ raceId }: { raceId: string }) => {
+      try {
+        const race = await db.race.findUnique({
+          where: { id: raceId },
+          select: { raceDay: { select: { divisionId: true } } },
+        });
+        if (!race) return;
+        const divisionId = race.raceDay.divisionId;
+        const membership = await db.membership.findFirst({
+          where: { userId: socket.data.userId, OR: [{ divisionId }, { team: { divisionId } }] },
+        });
+        if (!membership) return;
+        void socket.join(`race:${raceId}`);
+      } catch { /* ignore */ }
+    });
+
+    socket.on('race:leave', ({ raceId }: { raceId: string }) => {
+      void socket.leave(`race:${raceId}`);
+    });
+
     socket.on('disconnect', () => { /* cleanup if needed */ });
   });
 

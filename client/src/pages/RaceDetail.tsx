@@ -318,13 +318,27 @@ export default function RaceDetail() {
           <p className="text-sm text-gray-500 mt-1">ID: {raceId}</p>
         </div>
 
-        {/* Heat sheet link */}
-        <Link
-          to={`/races/${raceId}/heats`}
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
-        >
-          View Heat Sheet
-        </Link>
+        {/* Navigation links */}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to={`/races/${raceId}/heats`}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+          >
+            View Heat Sheet
+          </Link>
+          <Link
+            to={`/races/${raceId}/results`}
+            className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+          >
+            Results
+          </Link>
+          <Link
+            to={`/races/${raceId}/finals`}
+            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+          >
+            Finals
+          </Link>
+        </div>
 
         {/* Head coach: get/create lineup button */}
         {isHeadCoach && !myLineup && (

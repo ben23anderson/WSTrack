@@ -198,3 +198,16 @@ export type RecordFinishEventInput = z.infer<typeof RecordFinishEventSchema>;
 export type MarkDnsDqInput = z.infer<typeof MarkDnsDqSchema>;
 export type LogDisagreeInput = z.infer<typeof LogDisagreeSchema>;
 export type ManualResultInput = z.infer<typeof ManualResultSchema>;
+
+export const AdjustResultSchema = z.object({
+  place: z.number().int().min(1).optional(),
+  time_ms: z.number().int().positive().optional(),
+  status: z.enum(['ok', 'dns', 'dnf', 'dq']).optional(),
+});
+
+export const ReconcileHeatSchema = z.object({
+  save: z.boolean().default(true),
+});
+
+export type AdjustResultInput = z.infer<typeof AdjustResultSchema>;
+export type ReconcileHeatInput = z.infer<typeof ReconcileHeatSchema>;
