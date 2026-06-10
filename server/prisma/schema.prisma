@@ -43,7 +43,7 @@ model Division {
 
 model User {
   id           String    @id @default(cuid()) @db.VarChar(30)
-  email        String    @unique @db.VarChar(255)
+  email        String    @unique @db.VarChar(191)
   passwordHash String
   name         String
   createdAt    DateTime  @default(now())
@@ -452,7 +452,7 @@ model Result {
 model Invite {
   id          String    @id @default(cuid()) @db.VarChar(30)
   token       String    @unique @default(cuid()) @db.VarChar(30)
-  email       String    @db.VarChar(255)
+  email       String    @db.VarChar(191)
   role        String    @db.VarChar(50)
   teamId      String?   @db.VarChar(30)
   divisionId  String?   @db.VarChar(30)
