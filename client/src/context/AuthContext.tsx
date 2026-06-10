@@ -7,7 +7,7 @@ interface AuthContextValue {
   user: UserData | null;
   memberships: MembershipData[];
   isLoading: boolean;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -18,7 +18,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleRefetch = () => {
     void queryClient.invalidateQueries({ queryKey: ['me'] });
-    void refetch();
+    return refetch();
   };
 
   return (
