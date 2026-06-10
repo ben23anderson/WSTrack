@@ -78,3 +78,64 @@ export type UpdateAthleteInput = z.infer<typeof UpdateAthleteSchema>;
 export type UpsertBestTimeInput = z.infer<typeof UpsertBestTimeSchema>;
 export type CreateBoatInput = z.infer<typeof CreateBoatSchema>;
 export type UpdateBoatInput = z.infer<typeof UpdateBoatSchema>;
+
+export const CreateRaceDaySchema = z.object({
+  name: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  primary_official_id: z.string().optional(),
+  official_ids: z.array(z.string()).default([]),
+});
+
+export const CreateRaceSchema = z.object({
+  classification_id: z.string().min(1),
+  distance_id: z.string().min(1),
+  lane_count: z.number().int().min(1).max(20).default(8),
+  order_index: z.number().int().min(0),
+  has_finals: z.boolean().default(true),
+  final_b_enabled: z.boolean().default(false),
+  advancement_rule: z.record(z.unknown()).optional(),
+  final_b_rule: z.record(z.unknown()).optional(),
+});
+
+export const UpdateRaceSchema = CreateRaceSchema.partial().extend({
+  status: z.enum(['setup','boat_prep','seeded','live','review','published']).optional(),
+});
+
+export const CreateDistanceSchema = z.object({
+  label: z.string().min(1),
+  sort_order: z.number().int().default(0),
+});
+
+export const CreateClassificationSchema = z.object({
+  label: z.string().min(1),
+  is_doubles: z.boolean().default(false),
+  sort_order: z.number().int().default(0),
+});
+
+export const AddLineupEntrySchema = z.object({
+  athlete_id: z.string().min(1),
+  pair_id: z.string().optional(),
+});
+
+export const RequestSubstitutionSchema = z.object({
+  out_athlete_id: z.string().min(1),
+  in_athlete_id: z.string().min(1),
+});
+
+export const ReviewSubstitutionSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+});
+
+export const ScratchAthleteSchema = z.object({
+  athlete_id: z.string().min(1),
+});
+
+export type CreateRaceDayInput = z.infer<typeof CreateRaceDaySchema>;
+export type CreateRaceInput = z.infer<typeof CreateRaceSchema>;
+export type UpdateRaceInput = z.infer<typeof UpdateRaceSchema>;
+export type CreateDistanceInput = z.infer<typeof CreateDistanceSchema>;
+export type CreateClassificationInput = z.infer<typeof CreateClassificationSchema>;
+export type AddLineupEntryInput = z.infer<typeof AddLineupEntrySchema>;
+export type RequestSubstitutionInput = z.infer<typeof RequestSubstitutionSchema>;
+export type ReviewSubstitutionInput = z.infer<typeof ReviewSubstitutionSchema>;
+export type ScratchAthleteInput = z.infer<typeof ScratchAthleteSchema>;

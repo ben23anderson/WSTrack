@@ -9,6 +9,10 @@ import TeamDetail from './pages/TeamDetail.js';
 import AcceptInvite from './pages/AcceptInvite.js';
 import RosterPage from './pages/RosterPage.js';
 import BoatsPage from './pages/BoatsPage.js';
+import RaceDaysPage from './pages/RaceDaysPage.js';
+import RaceDayDetail from './pages/RaceDayDetail.js';
+import RaceDetail from './pages/RaceDetail.js';
+import DivisionConfig from './pages/DivisionConfig.js';
 
 export default function App() {
   return (
@@ -57,6 +61,38 @@ export default function App() {
           }
         />
         <Route path="/invites/:token" element={<AcceptInvite />} />
+        <Route
+          path="/divisions/:divisionId/race-days"
+          element={
+            <ProtectedRoute>
+              <RaceDaysPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/divisions/:divisionId/config"
+          element={
+            <ProtectedRoute>
+              <DivisionConfig />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/race-days/:raceDayId"
+          element={
+            <ProtectedRoute>
+              <RaceDayDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/races/:raceId"
+          element={
+            <ProtectedRoute>
+              <RaceDetail />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </AuthProvider>
   );

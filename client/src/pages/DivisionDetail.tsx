@@ -74,6 +74,23 @@ export default function DivisionDetail() {
           <h1 className="text-2xl font-bold text-gray-900">{division.name}</h1>
         </div>
 
+        <section className="flex gap-3">
+          <Link
+            to={`/divisions/${divisionId}/race-days`}
+            className="flex-1 flex items-center justify-center bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-xl px-4 py-3 text-sm font-medium min-h-11 transition-colors"
+          >
+            Race Days
+          </Link>
+          {isCoordinator && (
+            <Link
+              to={`/divisions/${divisionId}/config`}
+              className="flex-1 flex items-center justify-center bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl px-4 py-3 text-sm font-medium min-h-11 transition-colors"
+            >
+              Distances &amp; Classifications
+            </Link>
+          )}
+        </section>
+
         <section>
           <h2 className="text-base font-semibold text-gray-700 mb-3">Teams</h2>
           {division.teams.length > 0 ? (

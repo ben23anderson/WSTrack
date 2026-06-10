@@ -12,6 +12,12 @@ import invitesRouter from './routes/invites.js';
 import { createStorageProvider } from './lib/storage/index.js';
 import { createAthletesRouter } from './routes/athletes.js';
 import { createBoatsRouter } from './routes/boats.js';
+import configRouter from './routes/config.js';
+import raceDaysRouter from './routes/raceDays.js';
+import racesRouter from './routes/races.js';
+import lineupsRouter from './routes/lineups.js';
+import substitutionsRouter from './routes/substitutions.js';
+import scratchesRouter from './routes/scratches.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -48,6 +54,13 @@ export function createApp(): express.Application {
   app.use('/api/invites', invitesRouter);
   app.use('/api/teams/:teamId/athletes', createAthletesRouter(storage));
   app.use('/api/teams/:teamId/boats', createBoatsRouter());
+
+  app.use('/api/divisions/:divisionId', configRouter);
+  app.use('/api/divisions/:divisionId/race-days', raceDaysRouter);
+  app.use('/api/race-days/:raceDayId/races', racesRouter);
+  app.use('/api/races/:raceId', lineupsRouter);
+  app.use('/api/races/:raceId', substitutionsRouter);
+  app.use('/api/races/:raceId', scratchesRouter);
 
   return app;
 }
