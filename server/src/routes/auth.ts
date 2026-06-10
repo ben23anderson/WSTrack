@@ -71,6 +71,9 @@ router.post('/login', loginLimiter, async (req, res): Promise<void> => {
     }
 
     req.session.userId = user.id;
+    await new Promise<void>((resolve, reject) =>
+      req.session.save((err) => (err ? reject(err) : resolve()))
+    );
 
     res.json({
       user: {
@@ -80,7 +83,8 @@ router.post('/login', loginLimiter, async (req, res): Promise<void> => {
         createdAt: user.createdAt,
       },
     });
-  } catch {
+  } catch (err) {
+    console.error('[login error]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -99,6 +103,7 @@ router.post('/logout', (req, res): void => {
 
 // GET /api/auth/me
 router.get('/me', requireAuth, async (req, res): Promise<void> => {
+  console.log('[/me] session userId:', req.session.userId);
   try {
     const user = await db.user.findUnique({
       where: { id: req.session.userId },
@@ -125,7 +130,8 @@ router.get('/me', requireAuth, async (req, res): Promise<void> => {
       },
       memberships,
     });
-  } catch {
+  } catch (err) {
+    console.error('[/me error]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
