@@ -7,6 +7,8 @@ import Signup from './pages/Signup.js';
 import DivisionDetail from './pages/DivisionDetail.js';
 import TeamDetail from './pages/TeamDetail.js';
 import AcceptInvite from './pages/AcceptInvite.js';
+import RosterPage from './pages/RosterPage.js';
+import BoatsPage from './pages/BoatsPage.js';
 
 export default function App() {
   return (
@@ -35,6 +37,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <TeamDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teams/:teamId/roster"
+          element={
+            <ProtectedRoute>
+              <RosterPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teams/:teamId/boats"
+          element={
+            <ProtectedRoute>
+              <BoatsPage />
             </ProtectedRoute>
           }
         />

@@ -9,6 +9,9 @@ import divisionsRouter from './routes/divisions.js';
 import teamsRouter from './routes/teams.js';
 import membershipsRouter from './routes/memberships.js';
 import invitesRouter from './routes/invites.js';
+import { createStorageProvider } from './lib/storage/index.js';
+import { createAthletesRouter } from './routes/athletes.js';
+import { createBoatsRouter } from './routes/boats.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -33,12 +36,18 @@ export function createApp(): express.Application {
     },
   }));
 
+  const storage = createStorageProvider();
+
+  app.use('/uploads', express.static(config.UPLOAD_DIR));
+
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/divisions', divisionsRouter);
   app.use('/api/teams', teamsRouter);
   app.use('/api/teams/:teamId', membershipsRouter);
   app.use('/api/invites', invitesRouter);
+  app.use('/api/teams/:teamId/athletes', createAthletesRouter(storage));
+  app.use('/api/teams/:teamId/boats', createBoatsRouter());
 
   return app;
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { getTeam, getMembers, inviteUser, updateMember, removeMember } from '../api/teams.js';
@@ -120,6 +120,24 @@ export default function TeamDetail() {
           <p className="text-sm text-gray-500">{team.division.name}</p>
           <h1 className="text-2xl font-bold text-gray-900">{team.name}</h1>
         </div>
+
+        <section>
+          <h2 className="text-base font-semibold text-gray-700 mb-3">Team Pages</h2>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to={`/teams/${teamId}/roster`}
+              className="inline-flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 hover:text-blue-700 transition-colors"
+            >
+              Roster
+            </Link>
+            <Link
+              to={`/teams/${teamId}/boats`}
+              className="inline-flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 hover:text-blue-700 transition-colors"
+            >
+              Boat Inventory
+            </Link>
+          </div>
+        </section>
 
         {isHeadCoach && members.length > 0 && (
           <section>
