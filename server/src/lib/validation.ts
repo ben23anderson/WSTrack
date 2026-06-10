@@ -162,3 +162,9 @@ export type MarkBoatBroughtInput = z.infer<typeof MarkBoatBroughtSchema>;
 export type AssignBoatInput = z.infer<typeof AssignBoatSchema>;
 export type AutoAssignBoatsInput = z.infer<typeof AutoAssignBoatsSchema>;
 export type CreateBoatLoanInput = z.infer<typeof CreateBoatLoanSchema>;
+
+export const SeedRaceSchema = z.object({
+  strategy: z.enum(['snake', 'random']).default('snake'),
+  balance_teams: z.boolean().default(false),
+});
+export type SeedRaceInput = z.infer<typeof SeedRaceSchema>;

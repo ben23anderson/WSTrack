@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
@@ -317,6 +317,14 @@ export default function RaceDetail() {
           <h1 className="text-2xl font-bold text-gray-900">Race</h1>
           <p className="text-sm text-gray-500 mt-1">ID: {raceId}</p>
         </div>
+
+        {/* Heat sheet link */}
+        <Link
+          to={`/races/${raceId}/heats`}
+          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+        >
+          View Heat Sheet
+        </Link>
 
         {/* Head coach: get/create lineup button */}
         {isHeadCoach && !myLineup && (

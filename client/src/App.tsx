@@ -14,6 +14,7 @@ import RaceDayDetail from './pages/RaceDayDetail.js';
 import RaceDetail from './pages/RaceDetail.js';
 import DivisionConfig from './pages/DivisionConfig.js';
 import BoatPrepPage from './pages/BoatPrepPage.js';
+import HeatSheetPage from './pages/HeatSheetPage.js';
 
 export default function App() {
   return (
@@ -99,6 +100,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <BoatPrepPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/races/:raceId/heats"
+          element={
+            <ProtectedRoute>
+              <HeatSheetPage />
             </ProtectedRoute>
           }
         />
