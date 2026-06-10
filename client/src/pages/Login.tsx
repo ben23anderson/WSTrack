@@ -18,8 +18,8 @@ export default function Login() {
     setLoading(true);
     try {
       await login({ email, password });
-      refetch();
-      void navigate('/');
+      await refetch();
+      navigate('/');
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

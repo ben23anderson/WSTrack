@@ -19,8 +19,8 @@ export default function Signup() {
     setLoading(true);
     try {
       await signup({ name, email, password });
-      refetch();
-      void navigate('/');
+      await refetch();
+      navigate('/');
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
