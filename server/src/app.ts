@@ -1,7 +1,11 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { sessionMiddleware } from './lib/sessionMiddleware.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
@@ -61,6 +65,15 @@ export function createApp(): express.Application {
   app.use('/api/races/:raceId/boat-loans', boatLoansRouter);
   app.use('/api/races/:raceId', seedingRouter);
   app.use('/api/races/:raceId', finalsRouter);
+
+  // In production, serve the built React client from server/public
+  if (config.NODE_ENV === 'production') {
+    const clientDist = path.resolve(__dirname, '../../client/dist');
+    app.use(express.static(clientDist));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(clientDist, 'index.html'));
+    });
+  }
 
   return app;
 }
