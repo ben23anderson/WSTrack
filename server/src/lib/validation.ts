@@ -168,3 +168,33 @@ export const SeedRaceSchema = z.object({
   balance_teams: z.boolean().default(false),
 });
 export type SeedRaceInput = z.infer<typeof SeedRaceSchema>;
+
+export const RecordFinishEventSchema = z.object({
+  entry_id: z.string().min(1),
+  client_finish_ts: z.number().int().positive(),  // epoch ms
+  sequence: z.number().int().min(0),
+});
+
+export const MarkDnsDqSchema = z.object({
+  entry_id: z.string().min(1),
+  status: z.enum(['dns', 'dq']),
+});
+
+export const LogDisagreeSchema = z.object({
+  finish_event_id: z.string().min(1),
+  reason: z.string().optional(),
+});
+
+export const ManualResultSchema = z.object({
+  results: z.array(z.object({
+    entry_id: z.string().min(1),
+    place: z.number().int().min(1),
+    time_ms: z.number().int().positive().optional(),
+    status: z.enum(['ok', 'dns', 'dnf', 'dq']).default('ok'),
+  })),
+});
+
+export type RecordFinishEventInput = z.infer<typeof RecordFinishEventSchema>;
+export type MarkDnsDqInput = z.infer<typeof MarkDnsDqSchema>;
+export type LogDisagreeInput = z.infer<typeof LogDisagreeSchema>;
+export type ManualResultInput = z.infer<typeof ManualResultSchema>;

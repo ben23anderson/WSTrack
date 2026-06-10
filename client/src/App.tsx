@@ -15,6 +15,8 @@ import RaceDetail from './pages/RaceDetail.js';
 import DivisionConfig from './pages/DivisionConfig.js';
 import BoatPrepPage from './pages/BoatPrepPage.js';
 import HeatSheetPage from './pages/HeatSheetPage.js';
+import OfficiatingPage from './pages/OfficiatingPage.js';
+import LiveViewPage from './pages/LiveViewPage.js';
 
 export default function App() {
   return (
@@ -108,6 +110,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <HeatSheetPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/heats/:heatId/officiate"
+          element={
+            <ProtectedRoute>
+              <OfficiatingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/heats/:heatId/live"
+          element={
+            <ProtectedRoute>
+              <LiveViewPage />
             </ProtectedRoute>
           }
         />

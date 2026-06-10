@@ -1,8 +1,8 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import session from 'express-session';
 import { config } from './config.js';
+import { sessionMiddleware } from './lib/sessionMiddleware.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import divisionsRouter from './routes/divisions.js';
@@ -34,17 +34,7 @@ export function createApp(): express.Application {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  app.use(session({
-    secret: config.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    },
-  }));
+  app.use(sessionMiddleware);
 
   const storage = createStorageProvider();
 

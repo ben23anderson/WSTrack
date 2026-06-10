@@ -7,6 +7,7 @@ import { ApiError } from '../api/client.js';
 import { seedRace, getHeats, deleteHeats } from '../api/seeding.js';
 import type { HeatData } from '../api/seeding.js';
 
+
 function formatSeedTime(ms: number | null | undefined): string {
   if (ms == null) return '—';
   const totalSecs = ms / 1000;
@@ -18,14 +19,34 @@ function formatSeedTime(ms: number | null | undefined): string {
 interface HeatCardProps {
   heat: HeatData;
   centerLane: number;
+  raceId: string;
+  isOfficial: boolean;
 }
 
-function HeatCard({ heat, centerLane }: HeatCardProps) {
+function HeatCard({ heat, centerLane, raceId, isOfficial }: HeatCardProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <h3 className="font-semibold text-gray-800">Heat {heat.heatNumber}</h3>
-        <p className="text-xs text-gray-500">{heat.laneAssignments.length} entries</p>
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-start justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-800">Heat {heat.heatNumber}</h3>
+          <p className="text-xs text-gray-500">{heat.laneAssignments.length} entries</p>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          {isOfficial && (
+            <Link
+              to={`/heats/${heat.id}/officiate?raceId=${raceId}`}
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-2 py-1 font-medium"
+            >
+              Officiate
+            </Link>
+          )}
+          <Link
+            to={`/heats/${heat.id}/live?raceId=${raceId}`}
+            className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2 py-1 font-medium border border-gray-300"
+          >
+            Live View
+          </Link>
+        </div>
       </div>
       {heat.laneAssignments.length === 0 ? (
         <p className="px-4 py-3 text-sm text-gray-400">No entries in this heat.</p>
@@ -115,6 +136,7 @@ export default function HeatSheetPage() {
   });
 
   const isCoordinator = memberships.some((m) => m.role === 'coordinator');
+  const isOfficial = memberships.some((m) => m.role === 'official' || m.role === 'coordinator');
   const heats = heatsQuery.data?.heats ?? [];
   const hasHeats = heats.length > 0;
 
@@ -267,7 +289,13 @@ export default function HeatSheetPage() {
         {hasHeats && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {heats.map((heat) => (
-              <HeatCard key={heat.id} heat={heat} centerLane={centerLaneGuess} />
+              <HeatCard
+                key={heat.id}
+                heat={heat}
+                centerLane={centerLaneGuess}
+                raceId={raceId!}
+                isOfficial={isOfficial}
+              />
             ))}
           </div>
         )}
