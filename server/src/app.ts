@@ -18,6 +18,9 @@ import racesRouter from './routes/races.js';
 import lineupsRouter from './routes/lineups.js';
 import substitutionsRouter from './routes/substitutions.js';
 import scratchesRouter from './routes/scratches.js';
+import broughtBoatsRouter from './routes/broughtBoats.js';
+import boatAssignmentsRouter from './routes/boatAssignments.js';
+import boatLoansRouter from './routes/boatLoans.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -61,6 +64,9 @@ export function createApp(): express.Application {
   app.use('/api/races/:raceId', lineupsRouter);
   app.use('/api/races/:raceId', substitutionsRouter);
   app.use('/api/races/:raceId', scratchesRouter);
+  app.use('/api/race-days/:raceDayId/brought-boats', broughtBoatsRouter);
+  app.use('/api/races/:raceId/boat-assignments', boatAssignmentsRouter);
+  app.use('/api/races/:raceId/boat-loans', boatLoansRouter);
 
   return app;
 }

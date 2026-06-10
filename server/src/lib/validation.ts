@@ -139,3 +139,26 @@ export type AddLineupEntryInput = z.infer<typeof AddLineupEntrySchema>;
 export type RequestSubstitutionInput = z.infer<typeof RequestSubstitutionSchema>;
 export type ReviewSubstitutionInput = z.infer<typeof ReviewSubstitutionSchema>;
 export type ScratchAthleteInput = z.infer<typeof ScratchAthleteSchema>;
+
+export const MarkBoatBroughtSchema = z.object({
+  boat_id: z.string().min(1),
+});
+
+export const AssignBoatSchema = z.object({
+  boat_id: z.string().min(1),
+});
+
+export const AutoAssignBoatsSchema = z.object({
+  // If true, save the assignments; if false, just return proposed
+  save: z.boolean().default(true),
+});
+
+export const CreateBoatLoanSchema = z.object({
+  boat_id: z.string().min(1),
+  to_team_id: z.string().min(1),
+});
+
+export type MarkBoatBroughtInput = z.infer<typeof MarkBoatBroughtSchema>;
+export type AssignBoatInput = z.infer<typeof AssignBoatSchema>;
+export type AutoAssignBoatsInput = z.infer<typeof AutoAssignBoatsSchema>;
+export type CreateBoatLoanInput = z.infer<typeof CreateBoatLoanSchema>;

@@ -132,6 +132,7 @@ model Team {
   substitutions Substitution[]
   scratches     Scratch[]
   invites       Invite[]
+  raceDayBoats  RaceDayBoat[]
 }
 
 model Athlete {
@@ -182,6 +183,7 @@ model Boat {
   team            Team             @relation(fields: [teamId], references: [id])
   boatAssignments BoatAssignment[]
   loansAsBoat     BoatLoan[]
+  raceDayBoats    RaceDayBoat[]
 }
 
 model BoatLoan {
@@ -216,6 +218,7 @@ model RaceDay {
   primaryOfficial User?             @relation("PrimaryOfficial", fields: [primaryOfficialId], references: [id])
   officials       RaceDayOfficial[]
   races           Race[]
+  broughtBoats    RaceDayBoat[]
 }
 
 model RaceDayOfficial {
@@ -460,4 +463,17 @@ model Invite {
 
   team     Team?     @relation(fields: [teamId], references: [id])
   division Division? @relation(fields: [divisionId], references: [id])
+}
+
+// Tracks which boats a team is bringing to a race day
+model RaceDayBoat {
+  raceDayId String
+  boatId    String
+  teamId    String
+
+  raceDay RaceDay @relation(fields: [raceDayId], references: [id])
+  boat    Boat    @relation(fields: [boatId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+
+  @@id([raceDayId, boatId])
 }

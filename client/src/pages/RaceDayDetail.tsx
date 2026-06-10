@@ -186,6 +186,19 @@ export default function RaceDayDetail() {
           </section>
         )}
 
+        {/* Boat Prep link */}
+        <section>
+          <Link
+            to={`/race-days/${raceDayId ?? ''}/boat-prep`}
+            className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 hover:bg-yellow-100 transition-colors min-h-11"
+          >
+            <span className="font-medium text-yellow-800">Boat Prep</span>
+            <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </section>
+
         {/* Races */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">

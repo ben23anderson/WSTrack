@@ -186,6 +186,30 @@ export function requirePrimaryOfficial(
   };
 }
 
+/** Requires head_coach OR assistant_coach with `boat_assignments` permission on teamIdParam. */
+export function requireBoatAssignmentsAccess(
+  teamIdParam: string
+): (req: Request, res: Response, next: NextFunction) => void {
+  return async (req, res, next): Promise<void> => {
+    if (!req.session.userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const teamId = req.params[teamIdParam];
+    try {
+      const headCoach = await db.membership.findFirst({
+        where: { userId: req.session.userId, role: 'head_coach', teamId },
+      });
+      if (headCoach) { req.membership = headCoach; next(); return; }
+      const assistant = await db.membership.findFirst({
+        where: { userId: req.session.userId, role: 'assistant_coach', teamId },
+      });
+      if (assistant) {
+        const permissions = assistant.permissions as AssistantPermissions | null;
+        if (permissions?.boat_assignments) { req.membership = assistant; next(); return; }
+      }
+      res.status(403).json({ error: 'Forbidden' });
+    } catch { res.status(500).json({ error: 'Internal server error' }); }
+  };
+}
+
 /** Requires head_coach OR assistant_coach with `boat_inventory` permission on teamIdParam. */
 export function requireBoatInventoryAccess(
   teamIdParam: string

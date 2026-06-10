@@ -13,6 +13,7 @@ import RaceDaysPage from './pages/RaceDaysPage.js';
 import RaceDayDetail from './pages/RaceDayDetail.js';
 import RaceDetail from './pages/RaceDetail.js';
 import DivisionConfig from './pages/DivisionConfig.js';
+import BoatPrepPage from './pages/BoatPrepPage.js';
 
 export default function App() {
   return (
@@ -90,6 +91,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <RaceDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/race-days/:raceDayId/boat-prep"
+          element={
+            <ProtectedRoute>
+              <BoatPrepPage />
             </ProtectedRoute>
           }
         />
