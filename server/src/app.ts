@@ -27,6 +27,7 @@ import boatAssignmentsRouter from './routes/boatAssignments.js';
 import boatLoansRouter from './routes/boatLoans.js';
 import seedingRouter from './routes/seeding.js';
 import finalsRouter from './routes/finals.js';
+import leaguesRouter from './routes/leagues.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -48,6 +49,7 @@ export function createApp(): express.Application {
 
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/leagues', leaguesRouter);
   app.use('/api/divisions', divisionsRouter);
   app.use('/api/teams', teamsRouter);
   app.use('/api/teams/:teamId', membershipsRouter);

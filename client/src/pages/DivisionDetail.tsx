@@ -5,6 +5,7 @@ import Layout from '../components/Layout.js';
 import { getDivision, createTeam } from '../api/divisions.js';
 import type { DivisionData } from '../api/divisions.js';
 import { ApiError } from '../api/client.js';
+import { inviteUser } from '../api/teams.js';
 import { useAuthContext } from '../context/AuthContext.js';
 
 export default function DivisionDetail() {
@@ -13,6 +14,11 @@ export default function DivisionDetail() {
   const queryClient = useQueryClient();
   const [teamName, setTeamName] = useState('');
   const [formError, setFormError] = useState('');
+
+  // Per-team invite state: teamId -> { email, role, error, token }
+  const [inviteState, setInviteState] = useState<
+    Record<string, { email: string; role: string; error: string; token: string | null }>
+  >({});
 
   const { data, isLoading, error } = useQuery<{ division: DivisionData }, ApiError>({
     queryKey: ['division', divisionId],

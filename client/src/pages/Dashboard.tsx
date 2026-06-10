@@ -55,11 +55,26 @@ export default function Dashboard() {
         )}
 
         {memberships.length === 0 && (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
+          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 space-y-4">
             <p>You don't belong to any divisions or teams yet.</p>
             <p className="text-sm mt-2">Ask your coordinator to add you, or accept an invite.</p>
+            <Link
+              to="/leagues/new"
+              className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-6 py-3 text-sm min-h-11 transition-colors"
+            >
+              Set up your organization
+            </Link>
           </div>
         )}
+
+        {memberships.length > 0 &&
+          memberships.some((m) => m.role === 'coordinator') &&
+          !memberships.some((m) => m.role === 'coordinator' && m.divisionId) && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-yellow-800 text-sm">
+              Your coordinator account doesn't have a division assigned yet. Contact your league
+              administrator to have a division linked to your account.
+            </div>
+          )}
       </div>
     </Layout>
   );

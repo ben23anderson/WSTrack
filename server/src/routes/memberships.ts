@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { requireAuth, requireHeadCoach } from '../middleware/requireAuth.js';
 import { InviteUserSchema, UpdatePermissionsSchema } from '../lib/validation.js';
 import { SmtpEmailProvider } from '../lib/email/SmtpEmailProvider.js';
+import type { Request, Response, NextFunction } from 'express';
 
 const router = Router({ mergeParams: true });
 
@@ -15,11 +16,62 @@ const emailProvider = new SmtpEmailProvider(config.EMAIL_FROM, {
   pass: config.SMTP_PASS,
 });
 
-// POST /api/teams/:teamId/invite — head coach only
+// Inline auth middleware: head_coach of the team OR coordinator of the team's division
+async function requireHeadCoachOrDivisionCoordinator(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  if (!req.session.userId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const { teamId } = req.params;
+  try {
+    // Check head_coach first
+    const headCoachMembership = await db.membership.findFirst({
+      where: { userId: req.session.userId, role: 'head_coach', teamId },
+    });
+    if (headCoachMembership) {
+      req.membership = headCoachMembership;
+      next();
+      return;
+    }
+
+    // Check coordinator of the team's division
+    const team = await db.team.findUnique({
+      where: { id: teamId },
+      select: { divisionId: true },
+    });
+    if (!team) {
+      res.status(404).json({ error: 'Team not found' });
+      return;
+    }
+    const coordinatorMembership = await db.membership.findFirst({
+      where: {
+        userId: req.session.userId,
+        role: 'coordinator',
+        divisionId: team.divisionId,
+      },
+    });
+    if (coordinatorMembership) {
+      req.membership = coordinatorMembership;
+      next();
+      return;
+    }
+
+    res.status(403).json({ error: 'Forbidden' });
+  } catch (err) {
+    console.error('requireHeadCoachOrDivisionCoordinator error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// POST /api/teams/:teamId/invite — head coach or division coordinator
 router.post(
   '/invite',
   requireAuth,
-  requireHeadCoach('teamId'),
+  requireHeadCoachOrDivisionCoordinator,
   async (req, res): Promise<void> => {
     const { teamId } = req.params;
     const parsed = InviteUserSchema.safeParse(req.body);
@@ -28,6 +80,12 @@ router.post(
       return;
     }
     const { email, role, permissions } = parsed.data;
+
+    // Coordinators can only invite head_coach, assistant_coach, or official — not coordinator
+    if (req.membership?.role === 'coordinator' && role === 'coordinator') {
+      res.status(403).json({ error: 'Coordinators cannot invite other coordinators' });
+      return;
+    }
 
     try {
       const team = await db.team.findUnique({
@@ -79,7 +137,8 @@ router.post(
           expiresAt: invite.expiresAt,
         },
       });
-    } catch {
+    } catch (err) {
+      console.error('POST /invite error:', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

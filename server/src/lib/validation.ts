@@ -19,6 +19,13 @@ export const LoginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const CreateLeagueSchema = z.object({
+  leagueName: z.string().min(1).max(100),
+  divisionName: z.string().min(1).max(100),
+});
+
+export type CreateLeagueInput = z.infer<typeof CreateLeagueSchema>;
+
 export const CreateDivisionSchema = z.object({
   name: z.string().min(1, 'Division name is required'),
   leagueId: z.string().min(1, 'League ID is required'),
