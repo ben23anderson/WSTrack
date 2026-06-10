@@ -23,6 +23,7 @@ export interface AssistantPermissions {
 
 export interface InviteData {
   id: string;
+  token: string;
   email: string;
   role: string;
   expiresAt: string;

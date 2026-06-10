@@ -20,6 +20,7 @@ import LiveViewPage from './pages/LiveViewPage.js';
 import ReviewPage from './pages/ReviewPage.js';
 import RaceResultsPage from './pages/RaceResultsPage.js';
 import FinalsPage from './pages/FinalsPage.js';
+import CreateLeaguePage from './pages/CreateLeaguePage.js';
 
 export default function App() {
   return (
@@ -153,6 +154,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <FinalsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leagues/new"
+          element={
+            <ProtectedRoute>
+              <CreateLeaguePage />
             </ProtectedRoute>
           }
         />

@@ -100,20 +100,100 @@ export default function DivisionDetail() {
         <section>
           <h2 className="text-base font-semibold text-gray-700 mb-3">Teams</h2>
           {division.teams.length > 0 ? (
-            <ul className="space-y-2">
-              {division.teams.map((team) => (
-                <li key={team.id}>
-                  <Link
-                    to={`/teams/${team.id}`}
-                    className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
-                  >
-                    <span className="font-medium text-gray-900">{team.name}</span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </Link>
-                </li>
-              ))}
+            <ul className="space-y-4">
+              {division.teams.map((team) => {
+                const ts = inviteState[team.id] ?? { email: '', role: 'head_coach', error: '', token: null };
+                const setTs = (patch: Partial<typeof ts>) =>
+                  setInviteState((prev) => ({ ...prev, [team.id]: { ...ts, ...patch } }));
+
+                const handleInvite = async (e: React.FormEvent) => {
+                  e.preventDefault();
+                  setTs({ error: '', token: null });
+                  try {
+                    const result = await inviteUser(team.id, { email: ts.email.trim(), role: ts.role });
+                    setTs({ token: result.invite.token, email: '' });
+                  } catch (err) {
+                    setTs({ error: err instanceof ApiError ? err.message : 'Failed to send invite' });
+                  }
+                };
+
+                return (
+                  <li key={team.id} className="space-y-2">
+                    <Link
+                      to={`/teams/${team.id}`}
+                      className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
+                    >
+                      <span className="font-medium text-gray-900">{team.name}</span>
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+
+                    {isCoordinator && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-2">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Invite to {team.name}</p>
+                        {ts.token ? (
+                          <div className="space-y-2">
+                            <p className="text-xs text-green-700">Invite created. Share this link:</p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                readOnly
+                                value={`${window.location.origin}/invites/${ts.token}`}
+                                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-xs bg-white min-h-11 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/invites/${ts.token}`)}
+                                className="shrink-0 border border-gray-300 rounded-lg px-3 py-2 text-xs bg-white hover:bg-gray-100 min-h-11 transition-colors"
+                              >
+                                Copy
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setTs({ token: null })}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Send another invite
+                            </button>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleInvite} className="space-y-2">
+                            {ts.error && (
+                              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-xs">
+                                {ts.error}
+                              </div>
+                            )}
+                            <input
+                              type="email"
+                              required
+                              value={ts.email}
+                              onChange={(e) => setTs({ email: e.target.value })}
+                              placeholder="Email address"
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
+                            />
+                            <select
+                              value={ts.role}
+                              onChange={(e) => setTs({ role: e.target.value })}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 bg-white"
+                            >
+                              <option value="head_coach">Head Coach</option>
+                              <option value="assistant_coach">Assistant Coach</option>
+                              <option value="official">Official</option>
+                            </select>
+                            <button
+                              type="submit"
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors"
+                            >
+                              Send invite
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="text-gray-500 text-sm">No teams yet.</p>

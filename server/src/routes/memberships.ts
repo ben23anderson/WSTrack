@@ -82,7 +82,7 @@ router.post(
     const { email, role, permissions } = parsed.data;
 
     // Coordinators can only invite head_coach, assistant_coach, or official — not coordinator
-    if (req.membership?.role === 'coordinator' && role === 'coordinator') {
+    if (req.membership?.role === 'coordinator' && (role as string) === 'coordinator') {
       res.status(403).json({ error: 'Coordinators cannot invite other coordinators' });
       return;
     }
@@ -132,6 +132,7 @@ router.post(
       res.status(201).json({
         invite: {
           id: invite.id,
+          token: invite.token,
           email: invite.email,
           role: invite.role,
           expiresAt: invite.expiresAt,
