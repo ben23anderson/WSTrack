@@ -31,6 +31,7 @@ import finalsRouter from './routes/finals.js';
 export function createApp(): express.Application {
   const app = express();
 
+  app.set('trust proxy', 1);
   app.use(helmet());
   app.use(cors({
     origin: config.NODE_ENV === 'production' ? false : 'http://localhost:5173',
