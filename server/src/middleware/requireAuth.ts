@@ -104,3 +104,81 @@ export function requireAssistantPerm(
     }
   };
 }
+
+/** Requires head_coach OR assistant_coach with `roster` permission on teamIdParam. */
+export function requireRosterAccess(
+  teamIdParam: string
+): (req: Request, res: Response, next: NextFunction) => void {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.session.userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const teamId = req.params[teamIdParam];
+    try {
+      // Check head_coach first
+      const headCoach = await db.membership.findFirst({
+        where: { userId: req.session.userId, role: 'head_coach', teamId },
+      });
+      if (headCoach) {
+        req.membership = headCoach;
+        next();
+        return;
+      }
+      // Check assistant_coach with roster permission
+      const assistant = await db.membership.findFirst({
+        where: { userId: req.session.userId, role: 'assistant_coach', teamId },
+      });
+      if (assistant) {
+        const permissions = assistant.permissions as AssistantPermissions | null;
+        if (permissions?.roster) {
+          req.membership = assistant;
+          next();
+          return;
+        }
+      }
+      res.status(403).json({ error: 'Forbidden' });
+    } catch {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}
+
+/** Requires head_coach OR assistant_coach with `boat_inventory` permission on teamIdParam. */
+export function requireBoatInventoryAccess(
+  teamIdParam: string
+): (req: Request, res: Response, next: NextFunction) => void {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.session.userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const teamId = req.params[teamIdParam];
+    try {
+      // Check head_coach first
+      const headCoach = await db.membership.findFirst({
+        where: { userId: req.session.userId, role: 'head_coach', teamId },
+      });
+      if (headCoach) {
+        req.membership = headCoach;
+        next();
+        return;
+      }
+      // Check assistant_coach with boat_inventory permission
+      const assistant = await db.membership.findFirst({
+        where: { userId: req.session.userId, role: 'assistant_coach', teamId },
+      });
+      if (assistant) {
+        const permissions = assistant.permissions as AssistantPermissions | null;
+        if (permissions?.boat_inventory) {
+          req.membership = assistant;
+          next();
+          return;
+        }
+      }
+      res.status(403).json({ error: 'Forbidden' });
+    } catch {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}

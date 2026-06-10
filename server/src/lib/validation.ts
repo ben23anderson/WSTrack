@@ -47,3 +47,34 @@ export type CreateDivisionInput = z.infer<typeof CreateDivisionSchema>;
 export type CreateTeamInput = z.infer<typeof CreateTeamSchema>;
 export type InviteUserInput = z.infer<typeof InviteUserSchema>;
 export type UpdatePermissionsInput = z.infer<typeof UpdatePermissionsSchema>;
+
+export const CreateAthleteSchema = z.object({
+  name: z.string().min(1),
+  grade: z.string().optional(),
+});
+
+export const UpdateAthleteSchema = z.object({
+  name: z.string().min(1).optional(),
+  grade: z.string().optional(),
+});
+
+export const UpsertBestTimeSchema = z.object({
+  time_ms: z.number().int().positive(),
+  is_official: z.boolean().default(true),
+});
+
+export const CreateBoatSchema = z.object({
+  number: z.string().min(1),
+  model: z.string().optional(),
+  is_double: z.boolean().default(false),
+  model_rank: z.number().int().default(0),
+  number_rank: z.number().int().default(0),
+});
+
+export const UpdateBoatSchema = CreateBoatSchema.partial();
+
+export type CreateAthleteInput = z.infer<typeof CreateAthleteSchema>;
+export type UpdateAthleteInput = z.infer<typeof UpdateAthleteSchema>;
+export type UpsertBestTimeInput = z.infer<typeof UpsertBestTimeSchema>;
+export type CreateBoatInput = z.infer<typeof CreateBoatSchema>;
+export type UpdateBoatInput = z.infer<typeof UpdateBoatSchema>;
