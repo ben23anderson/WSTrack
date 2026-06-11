@@ -20,6 +20,8 @@ import { getDivisionClassifications } from '../api/divisions.js';
 import type { ClassificationSummary } from '../api/divisions.js';
 import { listBoatModels } from '../api/boatModels.js';
 import type { BoatModelData } from '../api/boatModels.js';
+import { listBoats } from '../api/boats.js';
+import type { BoatData } from '../api/boats.js';
 import { ApiError } from '../api/client.js';
 
 /** Parse "M:SS.ss" or "MM:SS.ss" to milliseconds. Returns null if invalid. */
@@ -228,6 +230,7 @@ interface AthleteFormProps {
   initialPreferredNumber?: string;
   classifications: ClassificationSummary[];
   boatModels: BoatModelData[];
+  boats: BoatData[];
   onSubmit: (data: {
     name: string;
     grade: string;
@@ -247,6 +250,7 @@ function AthleteForm({
   initialPreferredNumber = '',
   classifications,
   boatModels,
+  boats,
   onSubmit,
   onCancel,
   isPending,
@@ -326,13 +330,21 @@ function AthleteForm({
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Preferred Boat #</label>
-          <input
-            type="text"
+          <select
             value={preferredNumber}
             onChange={(e) => setPreferredNumber(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
-            placeholder="e.g. 42"
-          />
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 bg-white"
+          >
+            <option value="">— None —</option>
+            {boats
+              .slice()
+              .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
+              .map((b) => (
+                <option key={b.id} value={b.number}>
+                  #{b.number}{b.boatModel ? ` · ${b.boatModel.brand} ${b.boatModel.name}` : ''}
+                </option>
+              ))}
+          </select>
         </div>
       </div>
       <div className="flex gap-2">
@@ -361,10 +373,11 @@ interface AthleteCardProps {
   canManageRoster: boolean;
   classifications: ClassificationSummary[];
   boatModels: BoatModelData[];
+  boats: BoatData[];
   onDelete: (id: string) => void;
 }
 
-function AthleteCard({ athlete, teamId, canManageRoster, classifications, boatModels, onDelete }: AthleteCardProps) {
+function AthleteCard({ athlete, teamId, canManageRoster, classifications, boatModels, boats, onDelete }: AthleteCardProps) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -441,6 +454,7 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, boatMo
               initialPreferredNumber={athlete.preferredBoatNumber ?? ''}
               classifications={classifications}
               boatModels={boatModels}
+              boats={boats}
               onSubmit={(data) =>
                 updateMutation.mutate({
                   name: data.name,
@@ -728,6 +742,13 @@ export default function RosterPage() {
 
   const boatModels = modelsData?.models ?? [];
 
+  const { data: boatsData } = useQuery<{ boats: BoatData[] }, ApiError>({
+    queryKey: ['boats', teamId],
+    queryFn: () => listBoats(teamId!),
+    enabled: !!teamId,
+  });
+  const boats = boatsData?.boats ?? [];
+
   const { data, isLoading } = useQuery<{ athletes: AthleteData[] }, ApiError>({
     queryKey: ['athletes', teamId],
     queryFn: () => listAthletes(teamId!),
@@ -815,6 +836,7 @@ export default function RosterPage() {
             <AthleteForm
               classifications={classifications}
               boatModels={boatModels}
+              boats={boats}
               onSubmit={(data) =>
                 createMutation.mutate({
                   name: data.name,
@@ -851,6 +873,7 @@ export default function RosterPage() {
                 canManageRoster={canManageRoster}
                 classifications={classifications}
                 boatModels={boatModels}
+                boats={boats}
                 onDelete={(id) => deleteMutation.mutate(id)}
               />
             ))}
