@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
@@ -14,12 +14,15 @@ import {
   assignBoat,
   removeBoatAssignment,
   autoAssignBoats,
+  getAvailableBoatsForRace,
 } from '../api/boatAssignments.js';
-import type { BoatAssignmentData } from '../api/boatAssignments.js';
+import type { BoatAssignmentData, AvailableBoatData, ConflictLevel } from '../api/boatAssignments.js';
 import { listBoatLoans, createBoatLoan, deleteBoatLoan } from '../api/boatLoans.js';
 import type { BoatLoanData } from '../api/boatLoans.js';
 import { getLineups } from '../api/lineups.js';
 import type { LineupData } from '../api/lineups.js';
+import { getHeats } from '../api/seeding.js';
+import type { HeatData } from '../api/seeding.js';
 
 // ─── Collapsible section wrapper ──────────────────────────────────────────────
 
@@ -57,12 +60,22 @@ function Section({
 
 // ─── Conflict badge ────────────────────────────────────────────────────────────
 
-function ConflictBadge() {
-  return (
-    <span className="ml-1 text-yellow-600 font-medium text-xs bg-yellow-50 border border-yellow-200 rounded-full px-2 py-0.5">
-      Conflict
-    </span>
-  );
+function ConflictBadge({ level }: { level: ConflictLevel }) {
+  if (level === '1_heat') {
+    return (
+      <span className="ml-1 text-orange-700 font-medium text-xs bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
+        1 heat away
+      </span>
+    );
+  }
+  if (level === '2_heats') {
+    return (
+      <span className="ml-1 text-yellow-700 font-medium text-xs bg-yellow-50 border border-yellow-200 rounded-full px-2 py-0.5">
+        2 heats away
+      </span>
+    );
+  }
+  return null;
 }
 
 // ─── Section 1: Boats We're Bringing ──────────────────────────────────────────
@@ -191,10 +204,16 @@ interface RaceAssignmentsPanelProps {
   isHeadCoach: boolean;
 }
 
+function conflictLabel(level: ConflictLevel, isLoaned: boolean): string {
+  const loanSuffix = isLoaned ? ' [Loan]' : '';
+  if (level === '1_heat') return ` ⚠ 1h${loanSuffix}`;
+  if (level === '2_heats') return ` · 2h${loanSuffix}`;
+  return loanSuffix;
+}
+
 function RaceAssignmentsPanel({
   race,
   teamId,
-  raceDayId,
   canAssign,
   isHeadCoach,
 }: RaceAssignmentsPanelProps) {
@@ -213,15 +232,16 @@ function RaceAssignmentsPanel({
     enabled: !!race.id,
   });
 
-  const broughtQuery = useQuery<{ broughtBoats: RaceDayBoatData[] }, ApiError>({
-    queryKey: ['broughtBoats', raceDayId],
-    queryFn: () => getBroughtBoats(raceDayId),
-    enabled: !!raceDayId,
+  const availableBoatsQuery = useQuery<{ boats: AvailableBoatData[] }, ApiError>({
+    queryKey: ['availableBoats', race.id, teamId],
+    queryFn: () => getAvailableBoatsForRace(race.id, teamId),
+    enabled: !!race.id && !!teamId,
   });
 
-  const loansQuery = useQuery<{ loans: BoatLoanData[] }, ApiError>({
-    queryKey: ['boatLoans', race.id],
-    queryFn: () => listBoatLoans(race.id),
+  // Heats give us per-heat grouping and lane numbers
+  const heatsQuery = useQuery<{ heats: HeatData[] }, ApiError>({
+    queryKey: ['heats', race.id],
+    queryFn: () => getHeats(race.id),
     enabled: !!race.id,
   });
 
@@ -230,6 +250,7 @@ function RaceAssignmentsPanel({
       assignBoat(race.id, entryId, boatId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['boatAssignments', race.id] });
+      void queryClient.invalidateQueries({ queryKey: ['availableBoats', race.id, teamId] });
       setError('');
     },
     onError: (err: ApiError) => setError(err.message),
@@ -239,6 +260,7 @@ function RaceAssignmentsPanel({
     mutationFn: (entryId: string) => removeBoatAssignment(race.id, entryId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['boatAssignments', race.id] });
+      void queryClient.invalidateQueries({ queryKey: ['availableBoats', race.id, teamId] });
       setError('');
     },
     onError: (err: ApiError) => setError(err.message),
@@ -248,54 +270,117 @@ function RaceAssignmentsPanel({
     mutationFn: () => autoAssignBoats(race.id, teamId, true),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['boatAssignments', race.id] });
+      void queryClient.invalidateQueries({ queryKey: ['availableBoats', race.id, teamId] });
       setError('');
     },
     onError: (err: ApiError) => setError(err.message),
   });
 
-  // Get the lineup for this team in this race
+  // map entryId → { heatNumber, lane } (populated after seeding)
+  const entryHeatInfo = useMemo(() => {
+    const map = new Map<string, { heatNumber: number; lane: number }>();
+    for (const heat of heatsQuery.data?.heats ?? []) {
+      for (const la of heat.laneAssignments) {
+        map.set(la.entry.id, { heatNumber: heat.heatNumber, lane: la.lane });
+      }
+    }
+    return map;
+  }, [heatsQuery.data]);
+
+  const heatsSeeded = entryHeatInfo.size > 0;
+
   const lineup = lineupsQuery.data?.lineups.find((l) => l.teamId === teamId);
-
   if (!lineup) {
-    return (
-      <p className="text-sm text-gray-400 italic">No lineup submitted for this race.</p>
-    );
+    return <p className="text-sm text-gray-400 italic">No lineup submitted for this race.</p>;
   }
-
-  // Build available boats: own brought boats + loaned boats for this race
-  const broughtBoats = (broughtQuery.data?.broughtBoats ?? []).filter(
-    (rb) => rb.teamId === teamId
-  );
-  const loans = (loansQuery.data?.loans ?? []).filter((l) => l.toTeamId === teamId);
 
   const assignmentMap = new Map<string, BoatAssignmentData>(
     (assignmentsQuery.data?.assignments ?? []).map((a) => [a.entryId, a])
   );
 
-  const availableBoatOptions = [
-    ...broughtBoats.map((rb) => ({
-      id: rb.boatId,
-      label: `#${rb.boat.number}${rb.boat.model ? ` (${rb.boat.model})` : ''}`,
-      isLoaned: false,
-    })),
-    ...loans.map((l) => ({
-      id: l.boatId,
-      label: `#${l.boat.number}${l.boat.model ? ` (${l.boat.model})` : ''} [Loaned from ${l.fromTeam.name}]`,
-      isLoaned: true,
-    })),
-  ];
+  const availableBoatOptions = (availableBoatsQuery.data?.boats ?? []).map((b) => ({
+    id: b.id,
+    label: `#${b.number}${b.model ? ` (${b.model})` : ''}${conflictLabel(b.conflictLevel, b.isLoaned)}`,
+    conflictLevel: b.conflictLevel,
+  }));
 
   const entries = lineup.entries;
   const singleEntries = entries.filter((e) => !e.pairId);
   const doublesEntries = entries.filter((e) => e.pairId);
 
-  // Get unique doubles entries (just one of each pair)
+  // Group single entries by heat (or a single flat group when not yet seeded)
+  const heatGroups = useMemo(() => {
+    if (!heatsSeeded) return null;
+    const groups = new Map<number, typeof singleEntries>();
+    const unassigned: typeof singleEntries = [];
+    for (const entry of singleEntries) {
+      const info = entryHeatInfo.get(entry.id);
+      if (info) {
+        const existing = groups.get(info.heatNumber) ?? [];
+        groups.set(info.heatNumber, [...existing, entry]);
+      } else {
+        unassigned.push(entry);
+      }
+    }
+    return { groups, unassigned };
+  }, [singleEntries, entryHeatInfo, heatsSeeded]);
+
   const seenPairIds = new Set<string>();
   const uniqueDoublesPairs = doublesEntries.filter((e) => {
     if (!e.pairId || seenPairIds.has(e.pairId)) return false;
     seenPairIds.add(e.pairId);
     return true;
   });
+
+  function renderEntryRow(entry: (typeof singleEntries)[0]) {
+    const assignment = assignmentMap.get(entry.id);
+    const heatInfo = entryHeatInfo.get(entry.id);
+    return (
+      <div
+        key={entry.id}
+        className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2"
+      >
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-gray-800 truncate block">
+            {entry.athlete.name}
+            {heatInfo && !heatsSeeded && (
+              <span className="text-xs text-gray-400 ml-1">Lane {heatInfo.lane}</span>
+            )}
+          </span>
+          {assignment && assignment.conflictLevel !== 'none' && (
+            <ConflictBadge level={assignment.conflictLevel} />
+          )}
+        </div>
+        {canAssign ? (
+          <select
+            value={assignment?.boatId ?? ''}
+            onChange={(e) => {
+              const boatId = e.target.value;
+              if (!boatId) {
+                if (assignment) removeMutation.mutate(entry.id);
+              } else {
+                assignMutation.mutate({ entryId: entry.id, boatId });
+              }
+            }}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 min-w-[140px] flex-shrink-0"
+          >
+            <option value="">Unassigned</option>
+            {availableBoatOptions.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-sm text-gray-500 flex-shrink-0">
+            {assignment
+              ? `#${assignment.boat.number}${assignment.boat.model ? ` (${assignment.boat.model})` : ''}`
+              : 'Unassigned'}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -325,54 +410,97 @@ function RaceAssignmentsPanel({
         <p className="text-sm text-gray-400 italic">No entries in lineup.</p>
       )}
 
-      {/* Singles */}
+      {/* Singles — grouped by heat once seeded, flat list before seeding */}
       {singleEntries.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Singles</p>
-          {singleEntries.map((entry) => {
-            const assignment = assignmentMap.get(entry.id);
-            return (
-              <div
-                key={entry.id}
-                className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2"
-              >
-                <span className="text-sm text-gray-800 flex-1 min-w-0 truncate">
-                  {entry.athlete.name}
-                  {assignment?.hasConflict && <ConflictBadge />}
-                </span>
-                {canAssign ? (
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <select
-                      value={assignment?.boatId ?? ''}
-                      onChange={(e) => {
-                        const boatId = e.target.value;
-                        if (!boatId) {
-                          if (assignment) removeMutation.mutate(entry.id);
-                        } else {
-                          assignMutation.mutate({ entryId: entry.id, boatId });
-                        }
-                      }}
-                      className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 min-w-[140px]"
-                    >
-                      <option value="">Unassigned</option>
-                      {availableBoatOptions.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <span className="text-sm text-gray-500 flex-shrink-0">
-                    {assignment
-                      ? `#${assignment.boat.number}${assignment.boat.model ? ` (${assignment.boat.model})` : ''}`
-                      : 'Unassigned'}
-                    {assignment?.hasConflict && <ConflictBadge />}
-                  </span>
-                )}
+        <div className="space-y-3">
+          {!heatsSeeded ? (
+            <>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Singles{heatsQuery.isLoading ? '' : ' (heats not yet generated)'}
+              </p>
+              <div className="space-y-2">
+                {singleEntries.map(renderEntryRow)}
               </div>
-            );
-          })}
+            </>
+          ) : (
+            <>
+              {[...(heatGroups!.groups.entries())]
+                .sort(([a], [b]) => a - b)
+                .map(([heatNumber, heatEntries]) => (
+                  <div key={heatNumber} className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Heat {heatNumber}
+                    </p>
+                    {heatEntries
+                      .slice()
+                      .sort((a, b) => {
+                        const la = entryHeatInfo.get(a.id)?.lane ?? 0;
+                        const lb = entryHeatInfo.get(b.id)?.lane ?? 0;
+                        return la - lb;
+                      })
+                      .map((entry) => {
+                        const assignment = assignmentMap.get(entry.id);
+                        const heatInfo = entryHeatInfo.get(entry.id);
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2"
+                          >
+                            {heatInfo && (
+                              <span className="text-xs text-gray-400 w-10 flex-shrink-0 tabular-nums">
+                                L{heatInfo.lane}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm text-gray-800 truncate block">
+                                {entry.athlete.name}
+                              </span>
+                              {assignment && assignment.conflictLevel !== 'none' && (
+                                <ConflictBadge level={assignment.conflictLevel} />
+                              )}
+                            </div>
+                            {canAssign ? (
+                              <select
+                                value={assignment?.boatId ?? ''}
+                                onChange={(e) => {
+                                  const boatId = e.target.value;
+                                  if (!boatId) {
+                                    if (assignment) removeMutation.mutate(entry.id);
+                                  } else {
+                                    assignMutation.mutate({ entryId: entry.id, boatId });
+                                  }
+                                }}
+                                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 min-w-[140px] flex-shrink-0"
+                              >
+                                <option value="">Unassigned</option>
+                                {availableBoatOptions.map((b) => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-sm text-gray-500 flex-shrink-0">
+                                {assignment
+                                  ? `#${assignment.boat.number}${assignment.boat.model ? ` (${assignment.boat.model})` : ''}`
+                                  : 'Unassigned'}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                ))}
+              {heatGroups!.unassigned.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Not yet in a heat
+                  </p>
+                  {heatGroups!.unassigned.map(renderEntryRow)}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

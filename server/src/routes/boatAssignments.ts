@@ -3,13 +3,10 @@ import db from '../lib/db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { AssignBoatSchema, AutoAssignBoatsSchema } from '../lib/validation.js';
 import type { AssistantPermissions } from '../lib/validation.js';
-import { getConflictedBoatIds, getAvailableBoats, computeAutoAssignments } from '../lib/boatConflict.js';
+import { getBoatConflictLevels, getAvailableBoats, computeAutoAssignments } from '../lib/boatConflict.js';
 
 const router = Router({ mergeParams: true });
 
-/**
- * Check head_coach OR assistant_coach with boat_assignments permission on teamId.
- */
 async function hasBoatAssignmentsAccess(userId: string, teamId: string): Promise<boolean> {
   const hc = await db.membership.findFirst({ where: { userId, role: 'head_coach', teamId } });
   if (hc) return true;
@@ -20,20 +17,16 @@ async function hasBoatAssignmentsAccess(userId: string, teamId: string): Promise
 }
 
 // GET /api/races/:raceId/boat-assignments
-// List all assignments for this race with hasConflict flag
 router.get('/', requireAuth, async (req, res): Promise<void> => {
   const { raceId } = req.params;
   const userId = req.session.userId!;
-
   try {
-    // Verify race exists and check access
     const race = await db.race.findUnique({
       where: { id: raceId },
       select: { raceDayId: true, raceDay: { select: { divisionId: true } } },
     });
     if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
 
-    // Check user is division member (team member or coordinator)
     const membership = await db.membership.findFirst({
       where: {
         userId,
@@ -45,7 +38,7 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
     });
     if (!membership) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-    const conflictedIds = await getConflictedBoatIds(raceId);
+    const conflictLevels = await getBoatConflictLevels(raceId);
 
     const assignments = await db.boatAssignment.findMany({
       where: { raceId },
@@ -66,7 +59,7 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
       entryId: a.entryId,
       boatId: a.boatId,
       isFinalAssignment: a.isFinalAssignment,
-      hasConflict: conflictedIds.has(a.boatId),
+      conflictLevel: conflictLevels.get(a.boatId) ?? 'none',
       boat: a.boat,
       entry: {
         id: a.entry.id,
@@ -79,13 +72,46 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
     }));
 
     res.json({ assignments: result });
-  } catch {
+  } catch (err) {
+    console.error('[GET /boat-assignments]', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/races/:raceId/available-boats?team_id=xxx
+router.get('/available-boats', requireAuth, async (req, res): Promise<void> => {
+  const { raceId } = req.params;
+  const teamId = req.query.team_id as string | undefined;
+  const userId = req.session.userId!;
+  try {
+    if (!teamId) { res.status(400).json({ error: 'team_id is required' }); return; }
+
+    const race = await db.race.findUnique({
+      where: { id: raceId },
+      select: { raceDay: { select: { divisionId: true } } },
+    });
+    if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
+
+    const membership = await db.membership.findFirst({
+      where: {
+        userId,
+        OR: [
+          { divisionId: race.raceDay.divisionId },
+          { team: { divisionId: race.raceDay.divisionId } },
+        ],
+      },
+    });
+    if (!membership) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    const boats = await getAvailableBoats(raceId, teamId);
+    res.json({ boats });
+  } catch (err) {
+    console.error('[GET /available-boats]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // PUT /api/races/:raceId/boat-assignments/:entryId
-// Assign/reassign boat to an entry
 router.put('/:entryId', requireAuth, async (req, res): Promise<void> => {
   const { raceId, entryId } = req.params;
   const userId = req.session.userId!;
@@ -98,7 +124,6 @@ router.put('/:entryId', requireAuth, async (req, res): Promise<void> => {
   const { boat_id } = parsed.data;
 
   try {
-    // Get the entry and its team
     const entry = await db.lineupEntry.findUnique({
       where: { id: entryId },
       include: { lineup: { select: { teamId: true, raceId: true } } },
@@ -109,14 +134,11 @@ router.put('/:entryId', requireAuth, async (req, res): Promise<void> => {
     }
 
     const teamId = entry.lineup.teamId;
-
-    // Check permissions
     if (!await hasBoatAssignmentsAccess(userId, teamId)) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
 
-    // Check boat is available for this team in this race
     const available = await getAvailableBoats(raceId, teamId);
     const boatInfo = available.find((b) => b.id === boat_id);
     if (!boatInfo) {
@@ -124,7 +146,6 @@ router.put('/:entryId', requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    // Check boat not already assigned to another entry in this race
     const existingAssignment = await db.boatAssignment.findFirst({
       where: { raceId, boatId: boat_id, entryId: { not: entryId } },
     });
@@ -133,7 +154,6 @@ router.put('/:entryId', requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    // Upsert the assignment
     const assignment = await db.boatAssignment.upsert({
       where: { raceId_entryId: { raceId, entryId } },
       update: { boatId: boat_id },
@@ -152,26 +172,21 @@ router.put('/:entryId', requireAuth, async (req, res): Promise<void> => {
     res.json({
       assignment: {
         ...assignment,
-        hasConflict: boatInfo.hasConflict,
-        entry: {
-          ...assignment.entry,
-          teamId: assignment.entry.lineup.teamId,
-        },
+        conflictLevel: boatInfo.conflictLevel,
+        entry: { ...assignment.entry, teamId: assignment.entry.lineup.teamId },
       },
     });
-  } catch {
+  } catch (err) {
+    console.error('[PUT /boat-assignments/:entryId]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // DELETE /api/races/:raceId/boat-assignments/:entryId
-// Remove assignment
 router.delete('/:entryId', requireAuth, async (req, res): Promise<void> => {
   const { raceId, entryId } = req.params;
   const userId = req.session.userId!;
-
   try {
-    // Get the entry and its team
     const entry = await db.lineupEntry.findUnique({
       where: { id: entryId },
       include: { lineup: { select: { teamId: true, raceId: true } } },
@@ -180,23 +195,12 @@ router.delete('/:entryId', requireAuth, async (req, res): Promise<void> => {
       res.status(404).json({ error: 'Entry not found for this race' });
       return;
     }
-
-    const teamId = entry.lineup.teamId;
-
-    // Check permissions
-    if (!await hasBoatAssignmentsAccess(userId, teamId)) {
+    if (!await hasBoatAssignmentsAccess(userId, entry.lineup.teamId)) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
-
-    const assignment = await db.boatAssignment.findUnique({
-      where: { raceId_entryId: { raceId, entryId } },
-    });
-    if (!assignment) {
-      res.status(404).json({ error: 'Assignment not found' });
-      return;
-    }
-
+    const assignment = await db.boatAssignment.findUnique({ where: { raceId_entryId: { raceId, entryId } } });
+    if (!assignment) { res.status(404).json({ error: 'Assignment not found' }); return; }
     await db.boatAssignment.delete({ where: { raceId_entryId: { raceId, entryId } } });
     res.json({ ok: true });
   } catch {
@@ -205,7 +209,6 @@ router.delete('/:entryId', requireAuth, async (req, res): Promise<void> => {
 });
 
 // POST /api/races/:raceId/boat-assignments/auto-assign
-// Auto-assign boats for a team's singles in this race
 router.post('/auto-assign', requireAuth, async (req, res): Promise<void> => {
   const { raceId } = req.params;
   const userId = req.session.userId!;
@@ -223,14 +226,9 @@ router.post('/auto-assign', requireAuth, async (req, res): Promise<void> => {
   }
 
   try {
-    // Check permissions (head_coach only for auto-assign)
     const hc = await db.membership.findFirst({ where: { userId, role: 'head_coach', teamId } });
-    if (!hc) {
-      res.status(403).json({ error: 'Forbidden: head coach only' });
-      return;
-    }
+    if (!hc) { res.status(403).json({ error: 'Forbidden: head coach only' }); return; }
 
-    // Verify race exists
     const race = await db.race.findUnique({ where: { id: raceId } });
     if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
 
@@ -238,7 +236,6 @@ router.post('/auto-assign', requireAuth, async (req, res): Promise<void> => {
     const { save } = bodyParsed.data;
 
     if (save && proposed.length > 0) {
-      // Upsert each proposed assignment
       await Promise.all(
         proposed.map((p) =>
           db.boatAssignment.upsert({
@@ -251,7 +248,8 @@ router.post('/auto-assign', requireAuth, async (req, res): Promise<void> => {
     }
 
     res.json({ assignments: proposed, saved: save });
-  } catch {
+  } catch (err) {
+    console.error('[POST /boat-assignments/auto-assign]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
