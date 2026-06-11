@@ -114,9 +114,11 @@ router.post('/signup', loginLimiter, async (req, res): Promise<void> => {
     } else {
       // Regular signup: send verification email, don't log in
       try {
+        console.log('[signup] Sending verification email to', email);
         await sendVerificationEmail(email, name, verificationToken!);
+        console.log('[signup] Verification email sent to', email);
       } catch (err) {
-        console.error('[signup] Failed to send verification email:', err);
+        console.error('[signup] Failed to send verification email to', email, ':', err);
       }
       res.status(201).json({ requiresVerification: true });
     }
