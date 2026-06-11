@@ -6,8 +6,6 @@ export interface BoatData {
   number: string;
   model: string | null;
   isDouble: boolean;
-  modelRank: number;
-  numberRank: number;
   createdAt: string;
   deletedAt: string | null;
 }
@@ -30,8 +28,6 @@ export async function createBoat(
     number: string;
     model?: string;
     is_double?: boolean;
-    model_rank?: number;
-    number_rank?: number;
   }
 ): Promise<BoatResponse> {
   return apiFetch<BoatResponse>(`/teams/${teamId}/boats`, {
@@ -47,8 +43,6 @@ export async function updateBoat(
     number?: string;
     model?: string;
     is_double?: boolean;
-    model_rank?: number;
-    number_rank?: number;
   }
 ): Promise<BoatResponse> {
   return apiFetch<BoatResponse>(`/teams/${teamId}/boats/${boatId}`, {
@@ -63,5 +57,15 @@ export async function deleteBoat(
 ): Promise<{ ok: boolean }> {
   return apiFetch<{ ok: boolean }>(`/teams/${teamId}/boats/${boatId}`, {
     method: 'DELETE',
+  });
+}
+
+export async function bulkCreateBoats(
+  teamId: string,
+  boats: { number: string; model?: string; is_double?: boolean }[]
+): Promise<{ boats: BoatData[]; count: number }> {
+  return apiFetch<{ boats: BoatData[]; count: number }>(`/teams/${teamId}/boats/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ boats }),
   });
 }

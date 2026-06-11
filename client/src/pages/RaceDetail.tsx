@@ -34,10 +34,11 @@ interface LineupPanelProps {
   lineup: LineupData;
   isCoach: boolean;
   athletes: AthleteData[];
+  raceClassificationId: string | null;
   onRefresh: () => void;
 }
 
-function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPanelProps) {
+function LineupPanel({ raceId, lineup, isCoach, athletes, raceClassificationId, onRefresh }: LineupPanelProps) {
   const queryClient = useQueryClient();
   const [selectedAthlete, setSelectedAthlete] = useState('');
   const [entryError, setEntryError] = useState('');
@@ -90,7 +91,11 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
 
   const entries = entriesQuery.data?.entries ?? lineup.entries;
   const enteredAthleteIds = new Set(entries.map((e) => e.athleteId));
-  const availableAthletes = athletes.filter((a) => !enteredAthleteIds.has(a.id));
+  // Filter by classification: null means open (all athletes eligible)
+  const classificationFiltered = raceClassificationId
+    ? athletes.filter((a) => a.classificationId === raceClassificationId)
+    : athletes;
+  const availableAthletes = classificationFiltered.filter((a) => !enteredAthleteIds.has(a.id));
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
@@ -431,6 +436,7 @@ export default function RaceDetail() {
                 lineup={lineup}
                 isCoach={false}
                 athletes={[]}
+                raceClassificationId={raceMeta?.classificationId ?? null}
                 onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
               />
             ))
@@ -442,6 +448,7 @@ export default function RaceDetail() {
               lineup={myLineup}
               isCoach={true}
               athletes={athletes}
+              raceClassificationId={raceMeta?.classificationId ?? null}
               onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
             />
           ) : null}

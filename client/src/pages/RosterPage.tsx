@@ -11,6 +11,7 @@ import {
   uploadAthletePhoto,
   upsertBestTime,
   deleteBestTime,
+  bulkCreateAthletes,
 } from '../api/athletes.js';
 import type { AthleteData, BestTimeData } from '../api/athletes.js';
 import { getTeam } from '../api/teams.js';
@@ -221,8 +222,16 @@ interface AthleteFormProps {
   initialName?: string;
   initialGrade?: string;
   initialClassificationId?: string;
+  initialPreferredModel?: string;
+  initialPreferredNumber?: string;
   classifications: ClassificationSummary[];
-  onSubmit: (name: string, grade: string, classificationId: string) => void;
+  onSubmit: (data: {
+    name: string;
+    grade: string;
+    classificationId: string;
+    preferred_boat_model: string;
+    preferred_boat_number: string;
+  }) => void;
   onCancel: () => void;
   isPending: boolean;
 }
@@ -231,6 +240,8 @@ function AthleteForm({
   initialName = '',
   initialGrade = '',
   initialClassificationId = '',
+  initialPreferredModel = '',
+  initialPreferredNumber = '',
   classifications,
   onSubmit,
   onCancel,
@@ -239,10 +250,18 @@ function AthleteForm({
   const [name, setName] = useState(initialName);
   const [grade, setGrade] = useState(initialGrade);
   const [classificationId, setClassificationId] = useState(initialClassificationId);
+  const [preferredModel, setPreferredModel] = useState(initialPreferredModel);
+  const [preferredNumber, setPreferredNumber] = useState(initialPreferredNumber);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim()) onSubmit(name.trim(), grade.trim(), classificationId);
+    if (name.trim()) onSubmit({
+      name: name.trim(),
+      grade: grade.trim(),
+      classificationId,
+      preferred_boat_model: preferredModel.trim(),
+      preferred_boat_number: preferredNumber.trim(),
+    });
   };
 
   return (
@@ -287,6 +306,28 @@ function AthleteForm({
           </select>
         </div>
       )}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Preferred Boat Model</label>
+          <input
+            type="text"
+            value={preferredModel}
+            onChange={(e) => setPreferredModel(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
+            placeholder="e.g. Stellar"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Preferred Boat #</label>
+          <input
+            type="text"
+            value={preferredNumber}
+            onChange={(e) => setPreferredNumber(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
+            placeholder="e.g. 42"
+          />
+        </div>
+      </div>
       <div className="flex gap-2">
         <button
           type="submit"
@@ -322,8 +363,13 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDele
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateMutation = useMutation({
-    mutationFn: (data: { name?: string; grade?: string; classificationId?: string }) =>
-      updateAthlete(teamId, athlete.id, data),
+    mutationFn: (data: {
+      name?: string;
+      grade?: string;
+      classificationId?: string;
+      preferred_boat_model?: string | null;
+      preferred_boat_number?: string | null;
+    }) => updateAthlete(teamId, athlete.id, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['athletes', teamId] });
       setIsEditing(false);
@@ -383,12 +429,16 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDele
               initialName={athlete.name}
               initialGrade={athlete.grade ?? ''}
               initialClassificationId={athlete.classificationId ?? ''}
+              initialPreferredModel={athlete.preferredBoatModel ?? ''}
+              initialPreferredNumber={athlete.preferredBoatNumber ?? ''}
               classifications={classifications}
-              onSubmit={(name, grade, classificationId) =>
+              onSubmit={(data) =>
                 updateMutation.mutate({
-                  name,
-                  grade: grade || undefined,
-                  classificationId: classificationId || undefined,
+                  name: data.name,
+                  grade: data.grade || undefined,
+                  classificationId: data.classificationId || undefined,
+                  preferred_boat_model: data.preferred_boat_model || null,
+                  preferred_boat_number: data.preferred_boat_number || null,
                 })
               }
               onCancel={() => setIsEditing(false)}
@@ -405,6 +455,14 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDele
                   <span className="inline-block text-xs bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 mt-0.5">
                     {athlete.classification.label}
                   </span>
+                )}
+                {(athlete.preferredBoatModel || athlete.preferredBoatNumber) && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Pref:{' '}
+                    {athlete.preferredBoatNumber && <span className="font-medium text-gray-600">#{athlete.preferredBoatNumber}</span>}
+                    {athlete.preferredBoatNumber && athlete.preferredBoatModel && ' · '}
+                    {athlete.preferredBoatModel && <span className="text-gray-500">{athlete.preferredBoatModel}</span>}
+                  </p>
                 )}
               </div>
               {canManageRoster && (
@@ -437,11 +495,205 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDele
   );
 }
 
+// ─── CSV / Bulk Import ─────────────────────────────────────────────────────────
+
+interface BulkImportPanelProps {
+  teamId: string;
+  classifications: ClassificationSummary[];
+  onDone: () => void;
+}
+
+function BulkImportPanel({ teamId, classifications, onDone }: BulkImportPanelProps) {
+  const queryClient = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [csvText, setCsvText] = useState('');
+  const [preview, setPreview] = useState<{
+    name: string;
+    grade: string;
+    classificationLabel: string;
+    preferred_boat_model: string;
+    preferred_boat_number: string;
+  }[]>([]);
+  const [parseError, setParseError] = useState('');
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  const bulkMutation = useMutation({
+    mutationFn: (athletes: {
+      name: string;
+      grade?: string;
+      classificationId?: string;
+      preferred_boat_model?: string;
+      preferred_boat_number?: string;
+    }[]) => bulkCreateAthletes(teamId, athletes),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['athletes', teamId] });
+      setImportResult(`Imported ${data.count} athlete${data.count !== 1 ? 's' : ''}.`);
+      setCsvText('');
+      setPreview([]);
+    },
+  });
+
+  const classificationByLabel = new Map(
+    classifications.map((c) => [c.label.toLowerCase(), c.id])
+  );
+
+  function parseCsv(text: string) {
+    setParseError('');
+    setImportResult(null);
+    const lines = text.trim().split('\n').filter((l) => l.trim());
+    if (lines.length === 0) { setPreview([]); return; }
+
+    const firstLine = lines[0].toLowerCase();
+    const hasHeader = firstLine.includes('name') || firstLine.includes('grade');
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+
+    const rows: typeof preview = [];
+    for (const line of dataLines) {
+      const parts = line.split(',').map((p) => p.trim().replace(/^"|"$/g, ''));
+      const name = parts[0] ?? '';
+      if (!name) continue;
+      rows.push({
+        name,
+        grade: parts[1] ?? '',
+        classificationLabel: parts[2] ?? '',
+        preferred_boat_model: parts[3] ?? '',
+        preferred_boat_number: parts[4] ?? '',
+      });
+    }
+
+    if (rows.length === 0) {
+      setParseError('No valid rows found. Expected: name, grade, classification, preferred_model, preferred_number');
+      setPreview([]);
+      return;
+    }
+    if (rows.length > 200) {
+      setParseError('Maximum 200 athletes per import.');
+      setPreview([]);
+      return;
+    }
+    setPreview(rows);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setCsvText(text);
+      parseCsv(text);
+    };
+    reader.readAsText(file);
+  }
+
+  function handleImport() {
+    const athletes = preview.map((row) => ({
+      name: row.name,
+      grade: row.grade || undefined,
+      classificationId: classificationByLabel.get(row.classificationLabel.toLowerCase()) || undefined,
+      preferred_boat_model: row.preferred_boat_model || undefined,
+      preferred_boat_number: row.preferred_boat_number || undefined,
+    }));
+    bulkMutation.mutate(athletes);
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-gray-700">Bulk Import Athletes</h2>
+        <button onClick={onDone} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        CSV format: <code className="bg-gray-100 px-1 rounded">name, grade, classification, preferred_model, preferred_number</code>{' '}
+        (header optional; last 3 columns optional)
+      </p>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-2 text-sm min-h-10 transition-colors"
+        >
+          Choose CSV File
+        </button>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Or paste CSV text</label>
+        <textarea
+          value={csvText}
+          onChange={(e) => { setCsvText(e.target.value); parseCsv(e.target.value); }}
+          rows={5}
+          placeholder={'name,grade,classification,preferred_model,preferred_number\nJane Smith,10,Varsity,Stellar,42\nJohn Doe,11,,Epic,'}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      {parseError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-xs">{parseError}</div>
+      )}
+
+      {bulkMutation.isError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-xs">
+          {(bulkMutation.error as ApiError).message}
+        </div>
+      )}
+
+      {importResult && (
+        <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg px-3 py-2 text-xs">{importResult}</div>
+      )}
+
+      {preview.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-600">{preview.length} rows ready to import:</p>
+          <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-3 py-1.5 text-left text-gray-500">Name</th>
+                  <th className="px-3 py-1.5 text-left text-gray-500">Grade</th>
+                  <th className="px-3 py-1.5 text-left text-gray-500">Classification</th>
+                  <th className="px-3 py-1.5 text-left text-gray-500">Pref Model</th>
+                  <th className="px-3 py-1.5 text-left text-gray-500">Pref #</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.map((row, i) => (
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="px-3 py-1.5 font-medium text-gray-800">{row.name}</td>
+                    <td className="px-3 py-1.5 text-gray-600">{row.grade || '—'}</td>
+                    <td className="px-3 py-1.5 text-gray-600">{row.classificationLabel || '—'}</td>
+                    <td className="px-3 py-1.5 text-gray-600">{row.preferred_boat_model || '—'}</td>
+                    <td className="px-3 py-1.5 text-gray-600">{row.preferred_boat_number || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={bulkMutation.isPending}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
+          >
+            {bulkMutation.isPending ? 'Importing…' : `Import ${preview.length} Athletes`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
+
 export default function RosterPage() {
   const { teamId } = useParams<{ teamId: string }>();
   const { canManageRoster } = useTeamAccess(teamId ?? '');
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [error, setError] = useState('');
 
   const { data: teamData } = useQuery<{ team: TeamData }, ApiError>({
@@ -467,8 +719,13 @@ export default function RosterPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (input: { name: string; grade?: string; classificationId?: string }) =>
-      createAthlete(teamId!, input),
+    mutationFn: (input: {
+      name: string;
+      grade?: string;
+      classificationId?: string;
+      preferred_boat_model?: string;
+      preferred_boat_number?: string;
+    }) => createAthlete(teamId!, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['athletes', teamId] });
       setShowAddForm(false);
@@ -500,13 +757,25 @@ export default function RosterPage() {
             </Link>
             <h1 className="text-2xl font-bold text-gray-900">Roster</h1>
           </div>
-          {canManageRoster && !showAddForm && (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
-            >
-              Add Athlete
-            </button>
+          {canManageRoster && (
+            <div className="flex gap-2">
+              {!showBulkImport && (
+                <button
+                  onClick={() => { setShowBulkImport(true); setShowAddForm(false); }}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-3 py-2.5 text-sm min-h-11 transition-colors"
+                >
+                  Bulk Import
+                </button>
+              )}
+              {!showAddForm && !showBulkImport && (
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
+                >
+                  Add Athlete
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -516,16 +785,26 @@ export default function RosterPage() {
           </div>
         )}
 
+        {showBulkImport && (
+          <BulkImportPanel
+            teamId={teamId!}
+            classifications={classifications}
+            onDone={() => setShowBulkImport(false)}
+          />
+        )}
+
         {showAddForm && (
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <h2 className="text-base font-semibold text-gray-700 mb-3">New Athlete</h2>
             <AthleteForm
               classifications={classifications}
-              onSubmit={(name, grade, classificationId) =>
+              onSubmit={(data) =>
                 createMutation.mutate({
-                  name,
-                  grade: grade || undefined,
-                  classificationId: classificationId || undefined,
+                  name: data.name,
+                  grade: data.grade || undefined,
+                  classificationId: data.classificationId || undefined,
+                  preferred_boat_model: data.preferred_boat_model || undefined,
+                  preferred_boat_number: data.preferred_boat_number || undefined,
                 })
               }
               onCancel={() => {

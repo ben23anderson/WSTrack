@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../lib/db.js';
 import { requireBoatInventoryAccess, requireBoatRead } from '../middleware/requireAuth.js';
-import { CreateBoatSchema, UpdateBoatSchema } from '../lib/validation.js';
+import { CreateBoatSchema, UpdateBoatSchema, BulkCreateBoatsSchema } from '../lib/validation.js';
 
 export function createBoatsRouter(): Router {
   const router = Router({ mergeParams: true });
@@ -12,7 +12,7 @@ export function createBoatsRouter(): Router {
     try {
       const boats = await db.boat.findMany({
         where: { teamId, deletedAt: null },
-        orderBy: [{ modelRank: 'asc' }, { numberRank: 'asc' }],
+        orderBy: [{ model: 'asc' }, { number: 'asc' }],
       });
       res.json({ boats });
     } catch {
@@ -35,8 +35,6 @@ export function createBoatsRouter(): Router {
           number: parsed.data.number,
           model: parsed.data.model,
           isDouble: parsed.data.is_double,
-          modelRank: parsed.data.model_rank,
-          numberRank: parsed.data.number_rank,
         },
       });
       res.status(201).json({ boat });
@@ -84,8 +82,6 @@ export function createBoatsRouter(): Router {
           ...(parsed.data.number !== undefined ? { number: parsed.data.number } : {}),
           ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
           ...(parsed.data.is_double !== undefined ? { isDouble: parsed.data.is_double } : {}),
-          ...(parsed.data.model_rank !== undefined ? { modelRank: parsed.data.model_rank } : {}),
-          ...(parsed.data.number_rank !== undefined ? { numberRank: parsed.data.number_rank } : {}),
         },
       });
       res.json({ boat });
@@ -111,6 +107,29 @@ export function createBoatsRouter(): Router {
       });
       res.json({ ok: true });
     } catch {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // POST /api/teams/:teamId/boats/bulk
+  router.post('/bulk', requireBoatInventoryAccess('teamId'), async (req, res): Promise<void> => {
+    const { teamId } = req.params;
+    const parsed = BulkCreateBoatsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+      return;
+    }
+    try {
+      const created: unknown[] = [];
+      for (const b of parsed.data.boats) {
+        const boat = await db.boat.create({
+          data: { teamId, number: b.number, model: b.model, isDouble: b.is_double },
+        });
+        created.push(boat);
+      }
+      res.status(201).json({ boats: created, count: created.length });
+    } catch (err) {
+      console.error('[POST /boats/bulk]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });

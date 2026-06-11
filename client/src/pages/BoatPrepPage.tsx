@@ -6,6 +6,8 @@ import { useAuthContext } from '../context/AuthContext.js';
 import { apiFetch, ApiError } from '../api/client.js';
 import { listBoats } from '../api/boats.js';
 import type { BoatData } from '../api/boats.js';
+import { listAthletes } from '../api/athletes.js';
+import type { AthleteData } from '../api/athletes.js';
 import type { RaceData } from '../api/races.js';
 import { getBroughtBoats, markBoatBrought, unmarkBoatBrought } from '../api/broughtBoats.js';
 import type { RaceDayBoatData } from '../api/broughtBoats.js';
@@ -15,7 +17,7 @@ import {
   removeBoatAssignment,
   autoAssignBoats,
 } from '../api/boatAssignments.js';
-import type { BoatAssignmentData } from '../api/boatAssignments.js';
+import type { BoatAssignmentData, ConflictLevel } from '../api/boatAssignments.js';
 import { listBoatLoans, createBoatLoan, deleteBoatLoan } from '../api/boatLoans.js';
 import type { BoatLoanData } from '../api/boatLoans.js';
 import { getLineups } from '../api/lineups.js';
@@ -55,12 +57,33 @@ function Section({
   );
 }
 
-// ─── Conflict badge ────────────────────────────────────────────────────────────
+// ─── Conflict level badge ──────────────────────────────────────────────────────
 
-function ConflictBadge() {
+function ConflictLevelBadge({ level }: { level: ConflictLevel }) {
+  if (level === 'none') {
+    return (
+      <span className="ml-1 text-green-700 font-medium text-xs bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+        Available
+      </span>
+    );
+  }
+  if (level === '2_heats') {
+    return (
+      <span className="ml-1 text-yellow-700 font-medium text-xs bg-yellow-50 border border-yellow-200 rounded-full px-2 py-0.5">
+        2 heats away
+      </span>
+    );
+  }
+  if (level === '1_heat') {
+    return (
+      <span className="ml-1 text-orange-700 font-medium text-xs bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
+        1 heat away
+      </span>
+    );
+  }
   return (
-    <span className="ml-1 text-yellow-600 font-medium text-xs bg-yellow-50 border border-yellow-200 rounded-full px-2 py-0.5">
-      Conflict
+    <span className="ml-1 text-red-700 font-medium text-xs bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+      Unavailable
     </span>
   );
 }
@@ -183,12 +206,20 @@ function BroughtBoatsSection({ raceDayId, teamId, canManage }: BroughtBoatsSecti
 
 // ─── Section 2: Boat Assignments per race ─────────────────────────────────────
 
+interface AvailableBoatOption {
+  id: string;
+  number: string;
+  model: string | null;
+  isLoaned: boolean;
+}
+
 interface RaceAssignmentsPanelProps {
   race: RaceData;
   teamId: string;
   raceDayId: string;
   canAssign: boolean;
   isHeadCoach: boolean;
+  athletes: AthleteData[];
 }
 
 function RaceAssignmentsPanel({
@@ -197,6 +228,7 @@ function RaceAssignmentsPanel({
   raceDayId,
   canAssign,
   isHeadCoach,
+  athletes,
 }: RaceAssignmentsPanelProps) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
@@ -253,7 +285,6 @@ function RaceAssignmentsPanel({
     onError: (err: ApiError) => setError(err.message),
   });
 
-  // Get the lineup for this team in this race
   const lineup = lineupsQuery.data?.lineups.find((l) => l.teamId === teamId);
 
   if (!lineup) {
@@ -262,7 +293,6 @@ function RaceAssignmentsPanel({
     );
   }
 
-  // Build available boats: own brought boats + loaned boats for this race
   const broughtBoats = (broughtQuery.data?.broughtBoats ?? []).filter(
     (rb) => rb.teamId === teamId
   );
@@ -272,24 +302,27 @@ function RaceAssignmentsPanel({
     (assignmentsQuery.data?.assignments ?? []).map((a) => [a.entryId, a])
   );
 
-  const availableBoatOptions = [
+  const availableBoatOptions: AvailableBoatOption[] = [
     ...broughtBoats.map((rb) => ({
       id: rb.boatId,
-      label: `#${rb.boat.number}${rb.boat.model ? ` (${rb.boat.model})` : ''}`,
+      number: rb.boat.number,
+      model: rb.boat.model ?? null,
       isLoaned: false,
     })),
     ...loans.map((l) => ({
       id: l.boatId,
-      label: `#${l.boat.number}${l.boat.model ? ` (${l.boat.model})` : ''} [Loaned from ${l.fromTeam.name}]`,
+      number: l.boat.number,
+      model: l.boat.model ?? null,
       isLoaned: true,
     })),
   ];
+
+  const athleteMap = new Map(athletes.map((a) => [a.id, a]));
 
   const entries = lineup.entries;
   const singleEntries = entries.filter((e) => !e.pairId);
   const doublesEntries = entries.filter((e) => e.pairId);
 
-  // Get unique doubles entries (just one of each pair)
   const seenPairIds = new Set<string>();
   const uniqueDoublesPairs = doublesEntries.filter((e) => {
     if (!e.pairId || seenPairIds.has(e.pairId)) return false;
@@ -297,11 +330,24 @@ function RaceAssignmentsPanel({
     return true;
   });
 
+  function boatOptionLabel(boat: AvailableBoatOption, athleteId: string): string {
+    const athlete = athleteMap.get(athleteId);
+    const baseLabel = `#${boat.number}${boat.model ? ` (${boat.model})` : ''}${boat.isLoaned ? ' [Loaned]' : ''}`;
+    if (!athlete) return baseLabel;
+    if (athlete.preferredBoatNumber && boat.number === athlete.preferredBoatNumber) {
+      return `★ ${baseLabel}`;
+    }
+    if (athlete.preferredBoatModel && boat.model === athlete.preferredBoatModel) {
+      return `* ${baseLabel}`;
+    }
+    return baseLabel;
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-gray-700">
-          {race.classification?.label} &middot; {race.distance?.label}
+          {race.classification?.label ?? 'Open'} &middot; {race.distance?.label}
         </h4>
         {isHeadCoach && singleEntries.length > 0 && (
           <button
@@ -338,7 +384,7 @@ function RaceAssignmentsPanel({
               >
                 <span className="text-sm text-gray-800 flex-1 min-w-0 truncate">
                   {entry.athlete.name}
-                  {assignment?.hasConflict && <ConflictBadge />}
+                  {assignment && <ConflictLevelBadge level={assignment.conflictLevel} />}
                 </span>
                 {canAssign ? (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -352,12 +398,12 @@ function RaceAssignmentsPanel({
                           assignMutation.mutate({ entryId: entry.id, boatId });
                         }
                       }}
-                      className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 min-w-[140px]"
+                      className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 min-w-[160px]"
                     >
                       <option value="">Unassigned</option>
                       {availableBoatOptions.map((b) => (
                         <option key={b.id} value={b.id}>
-                          {b.label}
+                          {boatOptionLabel(b, entry.athleteId)}
                         </option>
                       ))}
                     </select>
@@ -367,7 +413,6 @@ function RaceAssignmentsPanel({
                     {assignment
                       ? `#${assignment.boat.number}${assignment.boat.model ? ` (${assignment.boat.model})` : ''}`
                       : 'Unassigned'}
-                    {assignment?.hasConflict && <ConflictBadge />}
                   </span>
                 )}
               </div>
@@ -405,7 +450,6 @@ function RaceAssignmentsPanel({
 
 // ─── Section 3: Boat Loans ────────────────────────────────────────────────────
 
-// Per-race outgoing loans sub-component — avoids hooks-in-map
 function RaceOutgoingLoans({
   race,
   teamId,
@@ -439,7 +483,7 @@ function RaceOutgoingLoans({
               <span className="text-gray-800">{loan.toTeam.name}</span>
               {loanRace && (
                 <span className="text-gray-500 ml-1.5">
-                  for {loanRace.classification?.label} {loanRace.distance?.label}
+                  for {loanRace.classification?.label ?? 'Open'} {loanRace.distance?.label}
                 </span>
               )}
             </div>
@@ -480,14 +524,12 @@ function BoatLoansSection({
   const [loanToTeamId, setLoanToTeamId] = useState('');
   const [loanError, setLoanError] = useState('');
 
-  // Fetch brought boats for the race day (to list available boats to loan)
   const broughtQuery = useQuery<{ broughtBoats: RaceDayBoatData[] }, ApiError>({
     queryKey: ['broughtBoats', raceDayId],
     queryFn: () => getBroughtBoats(raceDayId),
     enabled: !!raceDayId,
   });
 
-  // Fetch teams in division for "loan to" dropdown
   const teamsQuery = useQuery<{ teams: { id: string; name: string }[] }, ApiError>({
     queryKey: ['teamsInDivision', divisionId],
     queryFn: () =>
@@ -523,7 +565,6 @@ function BoatLoansSection({
 
   const otherTeams = (teamsQuery.data?.teams ?? []).filter((t) => t.id !== teamId);
 
-  // Find the next race name for selected loan boat and race
   const selectedRaceIndex = loanRaceId
     ? races.findIndex((r) => r.id === loanRaceId)
     : -1;
@@ -534,7 +575,6 @@ function BoatLoansSection({
 
   return (
     <div className="space-y-4">
-      {/* Existing outgoing loans — one sub-component per race to avoid hooks-in-map */}
       {races.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -553,7 +593,6 @@ function BoatLoansSection({
         </div>
       )}
 
-      {/* Loan creation form (head coach only) */}
       {isHeadCoach && (
         <div className="space-y-3 border border-gray-200 rounded-lg p-3">
           <p className="text-sm font-medium text-gray-700">Loan a Boat</p>
@@ -589,7 +628,7 @@ function BoatLoansSection({
                 <option value="">Select race…</option>
                 {races.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.classification?.label} &middot; {r.distance?.label}
+                    {r.classification?.label ?? 'Open'} &middot; {r.distance?.label}
                   </option>
                 ))}
               </select>
@@ -610,7 +649,7 @@ function BoatLoansSection({
             {nextRace && (
               <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg px-3 py-2 text-xs">
                 Note: This boat cannot be used in the immediately following race (
-                {nextRace.classification?.label} &middot; {nextRace.distance?.label}).
+                {nextRace.classification?.label ?? 'Open'} &middot; {nextRace.distance?.label}).
               </div>
             )}
           </div>
@@ -648,7 +687,6 @@ export default function BoatPrepPage() {
   const { raceDayId } = useParams<{ raceDayId: string }>();
   const { memberships } = useAuthContext();
 
-  // Determine user's team
   const coachMembership = memberships.find(
     (m) => m.role === 'head_coach' && m.teamId
   );
@@ -665,7 +703,6 @@ export default function BoatPrepPage() {
   const canManageBoatAssignments =
     isHeadCoach || (teamMembership?.role === 'assistant_coach' && !!perms['boat_assignments']);
 
-  // Determine divisionId from memberships
   const divisionId =
     coachMembership?.team
       ? memberships.find(
@@ -675,7 +712,6 @@ export default function BoatPrepPage() {
         )?.divisionId ?? ''
       : memberships.find((m) => m.divisionId)?.divisionId ?? '';
 
-  // Get team's division from team data
   const coordinatorMembership = memberships.find((m) => m.role === 'coordinator');
   const effectiveDivisionId = coordinatorMembership?.divisionId ?? divisionId;
 
@@ -692,9 +728,16 @@ export default function BoatPrepPage() {
     enabled: !!raceDayId,
   });
 
+  const athletesQuery = useQuery<{ athletes: AthleteData[] }, ApiError>({
+    queryKey: ['athletes', teamId],
+    queryFn: () => listAthletes(teamId!),
+    enabled: !!teamId,
+  });
+
   const races = (racesQuery.data?.races ?? []).slice().sort(
     (a, b) => a.orderIndex - b.orderIndex
   );
+  const athletes = athletesQuery.data?.athletes ?? [];
 
   if (!teamId) {
     return (
@@ -719,6 +762,16 @@ export default function BoatPrepPage() {
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 mt-1">Boat Prep</h1>
           <p className="text-sm text-gray-500">{teamMembership?.team?.name ?? 'My Team'}</p>
+        </div>
+
+        {/* Legend */}
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex flex-wrap gap-2 text-xs text-gray-500">
+          <span className="font-medium">Boat conflict key:</span>
+          <span className="bg-green-50 border border-green-200 text-green-700 rounded-full px-2 py-0.5">Available</span>
+          <span className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-full px-2 py-0.5">2 heats away</span>
+          <span className="bg-orange-50 border border-orange-200 text-orange-700 rounded-full px-2 py-0.5">1 heat away</span>
+          <span className="bg-red-50 border border-red-200 text-red-700 rounded-full px-2 py-0.5">Unavailable</span>
+          <span className="ml-2">★ = preferred number &nbsp; * = preferred model</span>
         </div>
 
         {/* Section 1: Boats We're Bringing */}
@@ -748,6 +801,7 @@ export default function BoatPrepPage() {
                   raceDayId={raceDayId!}
                   canAssign={canManageBoatAssignments}
                   isHeadCoach={isHeadCoach}
+                  athletes={athletes}
                 />
               ))}
             </div>

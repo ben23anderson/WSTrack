@@ -137,15 +137,17 @@ model Team {
 }
 
 model Athlete {
-  id               String    @id @default(cuid()) @db.VarChar(30)
-  teamId           String    @db.VarChar(30)
-  name             String
-  grade            String?
-  photoUrl         String?
-  classificationId String?   @db.VarChar(30)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  id                  String    @id @default(cuid()) @db.VarChar(30)
+  teamId              String    @db.VarChar(30)
+  name                String
+  grade               String?
+  photoUrl            String?
+  classificationId    String?   @db.VarChar(30)
+  preferredBoatModel  String?   @db.VarChar(50)
+  preferredBoatNumber String?   @db.VarChar(20)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
 
   team           Team              @relation(fields: [teamId], references: [id])
   classification Classification?   @relation(fields: [classificationId], references: [id])
@@ -170,18 +172,15 @@ model AthleteBestTime {
   @@unique([athleteId, distanceId])
 }
 
-// Boats sort by (modelRank, numberRank)
 model Boat {
-  id         String    @id @default(cuid()) @db.VarChar(30)
-  teamId     String    @db.VarChar(30)
-  number     String
-  model      String?
-  isDouble   Boolean   @default(false)
-  modelRank  Int       @default(0)
-  numberRank Int       @default(0)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  teamId    String    @db.VarChar(30)
+  number    String
+  model     String?
+  isDouble  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   team            Team             @relation(fields: [teamId], references: [id])
   boatAssignments BoatAssignment[]
@@ -239,7 +238,7 @@ model RaceDayOfficial {
 model Race {
   id               String    @id @default(cuid()) @db.VarChar(30)
   raceDayId        String    @db.VarChar(30)
-  classificationId String    @db.VarChar(30)
+  classificationId String?   @db.VarChar(30)
   distanceId       String    @db.VarChar(30)
   laneCount        Int       @default(8)
   orderIndex       Int
@@ -252,7 +251,7 @@ model Race {
   updatedAt        DateTime  @updatedAt
 
   raceDay         RaceDay          @relation(fields: [raceDayId], references: [id])
-  classification  Classification   @relation(fields: [classificationId], references: [id])
+  classification  Classification?  @relation(fields: [classificationId], references: [id])
   distance        Distance         @relation(fields: [distanceId], references: [id])
   lineups         Lineup[]
   boatAssignments BoatAssignment[]

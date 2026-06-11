@@ -59,12 +59,20 @@ export const CreateAthleteSchema = z.object({
   name: z.string().min(1),
   grade: z.string().optional(),
   classificationId: z.string().cuid().optional(),
+  preferred_boat_model: z.string().optional(),
+  preferred_boat_number: z.string().optional(),
 });
 
 export const UpdateAthleteSchema = z.object({
   name: z.string().min(1).optional(),
   grade: z.string().optional(),
   classificationId: z.string().cuid().optional(),
+  preferred_boat_model: z.string().optional().nullable(),
+  preferred_boat_number: z.string().optional().nullable(),
+});
+
+export const BulkCreateAthletesSchema = z.object({
+  athletes: z.array(CreateAthleteSchema).min(1).max(200),
 });
 
 export const UpsertBestTimeSchema = z.object({
@@ -76,11 +84,13 @@ export const CreateBoatSchema = z.object({
   number: z.string().min(1),
   model: z.string().optional(),
   is_double: z.boolean().default(false),
-  model_rank: z.number().int().default(0),
-  number_rank: z.number().int().default(0),
 });
 
 export const UpdateBoatSchema = CreateBoatSchema.partial();
+
+export const BulkCreateBoatsSchema = z.object({
+  boats: z.array(CreateBoatSchema).min(1).max(500),
+});
 
 export type CreateAthleteInput = z.infer<typeof CreateAthleteSchema>;
 export type UpdateAthleteInput = z.infer<typeof UpdateAthleteSchema>;
@@ -96,7 +106,7 @@ export const CreateRaceDaySchema = z.object({
 });
 
 export const CreateRaceSchema = z.object({
-  classification_id: z.string().min(1),
+  classification_id: z.string().min(1).optional(),
   distance_id: z.string().min(1),
   lane_count: z.number().int().min(1).max(20).default(8),
   order_index: z.number().int().min(0),

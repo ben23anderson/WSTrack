@@ -28,6 +28,109 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+type AdvancementRuleType = 'none' | 'top_n_per_heat_plus_fastest' | 'top_overall';
+
+interface AdvancementRuleFormProps {
+  ruleType: AdvancementRuleType;
+  topNPerHeat: string;
+  additionalFastest: string;
+  topOverallCount: string;
+  onRuleTypeChange: (t: AdvancementRuleType) => void;
+  onTopNPerHeatChange: (v: string) => void;
+  onAdditionalFastestChange: (v: string) => void;
+  onTopOverallCountChange: (v: string) => void;
+}
+
+function AdvancementRuleForm({
+  ruleType,
+  topNPerHeat,
+  additionalFastest,
+  topOverallCount,
+  onRuleTypeChange,
+  onTopNPerHeatChange,
+  onAdditionalFastestChange,
+  onTopOverallCountChange,
+}: AdvancementRuleFormProps) {
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-gray-700">Advancement Rule</label>
+      <select
+        value={ruleType}
+        onChange={(e) => onRuleTypeChange(e.target.value as AdvancementRuleType)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
+      >
+        <option value="none">None (no finals)</option>
+        <option value="top_n_per_heat_plus_fastest">Top N per heat + fastest</option>
+        <option value="top_overall">Top overall</option>
+      </select>
+
+      {ruleType === 'top_n_per_heat_plus_fastest' && (
+        <div className="grid grid-cols-2 gap-3 pl-3 border-l-2 border-blue-200">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Top N per heat</label>
+            <input
+              type="number"
+              min="1"
+              value={topNPerHeat}
+              onChange={(e) => onTopNPerHeatChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-10"
+              placeholder="e.g. 2"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Additional fastest</label>
+            <input
+              type="number"
+              min="0"
+              value={additionalFastest}
+              onChange={(e) => onAdditionalFastestChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-10"
+              placeholder="e.g. 2"
+            />
+          </div>
+        </div>
+      )}
+
+      {ruleType === 'top_overall' && (
+        <div className="pl-3 border-l-2 border-blue-200">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Advance top N total</label>
+          <input
+            type="number"
+            min="1"
+            value={topOverallCount}
+            onChange={(e) => onTopOverallCountChange(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-10"
+            placeholder="e.g. 8"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildAdvancementRule(
+  ruleType: AdvancementRuleType,
+  topNPerHeat: string,
+  additionalFastest: string,
+  topOverallCount: string
+): Record<string, unknown> | undefined {
+  if (ruleType === 'none') return undefined;
+  if (ruleType === 'top_n_per_heat_plus_fastest') {
+    return {
+      type: 'top_n_per_heat_plus_fastest',
+      top_n_per_heat: parseInt(topNPerHeat, 10) || 2,
+      additional_fastest: parseInt(additionalFastest, 10) || 0,
+    };
+  }
+  if (ruleType === 'top_overall') {
+    return {
+      type: 'top_overall',
+      count: parseInt(topOverallCount, 10) || 8,
+    };
+  }
+  return undefined;
+}
+
 export default function RaceDayDetail() {
   const { raceDayId } = useParams<{ raceDayId: string }>();
   const { memberships } = useAuthContext();
@@ -39,23 +142,23 @@ export default function RaceDayDetail() {
   const [laneCount, setLaneCount] = useState('8');
   const [orderIndex, setOrderIndex] = useState('0');
   const [hasFinals, setHasFinals] = useState(true);
-  const [advancementRuleJson, setAdvancementRuleJson] = useState('');
+  const [ruleType, setRuleType] = useState<AdvancementRuleType>('none');
+  const [topNPerHeat, setTopNPerHeat] = useState('2');
+  const [additionalFastest, setAdditionalFastest] = useState('0');
+  const [topOverallCount, setTopOverallCount] = useState('8');
   const [formError, setFormError] = useState('');
 
-  // Find the user's divisionId from memberships (coordinator or any division membership)
   const divisionId =
     memberships.find((m) => m.role === 'coordinator')?.divisionId ??
     memberships.find((m) => m.divisionId)?.divisionId ??
     memberships.find((m) => m.team?.id)?.division?.id;
 
-  // Fetch raceDay + races using divisionId
   const raceDayQuery = useQuery<{ raceDay: RaceDayData }, ApiError>({
     queryKey: ['raceDayWithDiv', raceDayId, divisionId],
     queryFn: () => getRaceDay(divisionId!, raceDayId!),
     enabled: !!raceDayId && !!divisionId,
   });
 
-  // Also fetch races directly (doesn't need divisionId in this form)
   const racesDirectQuery = useQuery<{ races: RaceData[] }, ApiError>({
     queryKey: ['racesDirect', raceDayId],
     queryFn: async () => {
@@ -101,7 +204,10 @@ export default function RaceDayDetail() {
       setLaneCount('8');
       setOrderIndex('0');
       setHasFinals(true);
-      setAdvancementRuleJson('');
+      setRuleType('none');
+      setTopNPerHeat('2');
+      setAdditionalFastest('0');
+      setTopOverallCount('8');
       setFormError('');
     },
     onError: (err: ApiError) => setFormError(err.message),
@@ -118,19 +224,12 @@ export default function RaceDayDetail() {
   const handleAddRace = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    if (!classificationId || !distanceId) {
-      setFormError('Classification and distance are required'); return;
+    if (!distanceId) {
+      setFormError('Distance is required'); return;
     }
-    let advancementRule: Record<string, unknown> | undefined;
-    if (advancementRuleJson.trim()) {
-      try {
-        advancementRule = JSON.parse(advancementRuleJson) as Record<string, unknown>;
-      } catch {
-        setFormError('Advancement rule must be valid JSON'); return;
-      }
-    }
+    const advancementRule = buildAdvancementRule(ruleType, topNPerHeat, additionalFastest, topOverallCount);
     createRaceMutation.mutate({
-      classification_id: classificationId,
+      classification_id: classificationId || undefined,
       distance_id: distanceId,
       lane_count: parseInt(laneCount, 10) || 8,
       order_index: parseInt(orderIndex, 10) || 0,
@@ -233,7 +332,7 @@ export default function RaceDayDetail() {
                     <div className="flex items-center justify-between px-4 py-3">
                       <div>
                         <p className={`font-medium ${isActive ? 'text-green-900' : 'text-gray-900'}`}>
-                          {race.classification?.label ?? '—'} · {race.distance?.label ?? '—'}
+                          {race.classification?.label ?? 'Open'} · {race.distance?.label ?? '—'}
                         </p>
                         <p className="text-xs text-gray-500">{race.laneCount} lanes</p>
                       </div>
@@ -296,14 +395,13 @@ export default function RaceDayDetail() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Classification *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Classification</label>
                 <select
                   value={classificationId}
                   onChange={(e) => setClassificationId(e.target.value)}
-                  required
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
                 >
-                  <option value="">Select…</option>
+                  <option value="">Open (no classification)</option>
                   {(classificationsQuery.data?.classifications ?? []).map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
                   ))}
@@ -355,18 +453,18 @@ export default function RaceDayDetail() {
                 />
                 Has finals
               </label>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Advancement rule (JSON, optional)
-                </label>
-                <textarea
-                  value={advancementRuleJson}
-                  onChange={(e) => setAdvancementRuleJson(e.target.value)}
-                  placeholder='{"type":"top_n_per_heat","top_n":2}'
-                  rows={2}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              {hasFinals && (
+                <AdvancementRuleForm
+                  ruleType={ruleType}
+                  topNPerHeat={topNPerHeat}
+                  additionalFastest={additionalFastest}
+                  topOverallCount={topOverallCount}
+                  onRuleTypeChange={setRuleType}
+                  onTopNPerHeatChange={setTopNPerHeat}
+                  onAdditionalFastestChange={setAdditionalFastest}
+                  onTopOverallCountChange={setTopOverallCount}
                 />
-              </div>
+              )}
               <div className="flex gap-2">
                 <button
                   type="submit"

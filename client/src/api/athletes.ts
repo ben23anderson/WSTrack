@@ -24,6 +24,8 @@ export interface AthleteData {
   photoUrl: string | null;
   classificationId: string | null;
   classification: { id: string; label: string } | null;
+  preferredBoatModel: string | null;
+  preferredBoatNumber: string | null;
   createdAt: string;
   deletedAt: string | null;
   bestTimes: BestTimeData[];
@@ -47,7 +49,13 @@ export async function listAthletes(teamId: string): Promise<AthletesResponse> {
 
 export async function createAthlete(
   teamId: string,
-  data: { name: string; grade?: string; classificationId?: string }
+  data: {
+    name: string;
+    grade?: string;
+    classificationId?: string;
+    preferred_boat_model?: string;
+    preferred_boat_number?: string;
+  }
 ): Promise<AthleteResponse> {
   return apiFetch<AthleteResponse>(`/teams/${teamId}/athletes`, {
     method: 'POST',
@@ -58,7 +66,13 @@ export async function createAthlete(
 export async function updateAthlete(
   teamId: string,
   athleteId: string,
-  data: { name?: string; grade?: string; classificationId?: string }
+  data: {
+    name?: string;
+    grade?: string;
+    classificationId?: string;
+    preferred_boat_model?: string | null;
+    preferred_boat_number?: string | null;
+  }
 ): Promise<AthleteResponse> {
   return apiFetch<AthleteResponse>(`/teams/${teamId}/athletes/${athleteId}`, {
     method: 'PATCH',
@@ -124,4 +138,20 @@ export async function deleteBestTime(
     `/teams/${teamId}/athletes/${athleteId}/best-times/${distanceId}`,
     { method: 'DELETE' }
   );
+}
+
+export async function bulkCreateAthletes(
+  teamId: string,
+  athletes: {
+    name: string;
+    grade?: string;
+    classificationId?: string;
+    preferred_boat_model?: string;
+    preferred_boat_number?: string;
+  }[]
+): Promise<{ athletes: AthleteData[]; count: number }> {
+  return apiFetch<{ athletes: AthleteData[]; count: number }>(`/teams/${teamId}/athletes/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ athletes }),
+  });
 }

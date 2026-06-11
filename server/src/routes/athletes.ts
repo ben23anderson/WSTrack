@@ -8,6 +8,7 @@ import {
   CreateAthleteSchema,
   UpdateAthleteSchema,
   UpsertBestTimeSchema,
+  BulkCreateAthletesSchema,
 } from '../lib/validation.js';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -81,6 +82,8 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           name: parsed.data.name,
           grade: parsed.data.grade,
           ...(parsed.data.classificationId ? { classificationId: parsed.data.classificationId } : {}),
+          ...(parsed.data.preferred_boat_model ? { preferredBoatModel: parsed.data.preferred_boat_model } : {}),
+          ...(parsed.data.preferred_boat_number ? { preferredBoatNumber: parsed.data.preferred_boat_number } : {}),
         },
         include: {
           bestTimes: {
@@ -142,6 +145,8 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
           ...(parsed.data.grade !== undefined ? { grade: parsed.data.grade } : {}),
           ...(parsed.data.classificationId !== undefined ? { classificationId: parsed.data.classificationId } : {}),
+          ...(parsed.data.preferred_boat_model !== undefined ? { preferredBoatModel: parsed.data.preferred_boat_model ?? null } : {}),
+          ...(parsed.data.preferred_boat_number !== undefined ? { preferredBoatNumber: parsed.data.preferred_boat_number ?? null } : {}),
         },
         include: {
           bestTimes: {
@@ -289,6 +294,37 @@ export function createAthletesRouter(storage: StorageProvider): Router {
       }
     }
   );
+
+  // POST /api/teams/:teamId/athletes/bulk
+  router.post('/bulk', requireRosterAccess('teamId'), async (req, res): Promise<void> => {
+    const { teamId } = req.params;
+    const parsed = BulkCreateAthletesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+      return;
+    }
+    try {
+      const created: unknown[] = [];
+      for (const a of parsed.data.athletes) {
+        const athlete = await db.athlete.create({
+          data: {
+            teamId,
+            name: a.name,
+            grade: a.grade,
+            ...(a.classificationId ? { classificationId: a.classificationId } : {}),
+            ...(a.preferred_boat_model ? { preferredBoatModel: a.preferred_boat_model } : {}),
+            ...(a.preferred_boat_number ? { preferredBoatNumber: a.preferred_boat_number } : {}),
+          },
+          include: { classification: { select: { id: true, label: true } }, bestTimes: { include: { distance: { select: { id: true, label: true, sortOrder: true } } } } },
+        });
+        created.push(athlete);
+      }
+      res.status(201).json({ athletes: created, count: created.length });
+    } catch (err) {
+      console.error('[POST /athletes/bulk]', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
 
   return router;
 }
