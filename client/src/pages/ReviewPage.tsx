@@ -189,7 +189,7 @@ export default function ReviewPage() {
       setReconcilePreview(data.entries);
       setReconcileAllAgreed(data.all_agreed);
       setReconcileSaved(true);
-      void queryClient.invalidateQueries({ queryKey: ['heat-results', heatId] });
+      void resultsQuery.refetch();
       setActionError('');
     },
     onError: (err: ApiError) => {
@@ -309,9 +309,13 @@ export default function ReviewPage() {
             <div className="flex justify-center py-8">
               <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : resultsQuery.isError ? (
+            <p className="px-4 py-4 text-sm text-red-500">
+              Error loading results: {(resultsQuery.error as ApiError).message}
+            </p>
           ) : !hasResults ? (
             <p className="px-4 py-4 text-sm text-gray-400">
-              No results yet — use "Apply &amp; Save Reconciliation" above to generate results from official tapes.
+              No results yet — use "Reconcile &amp; Save Results" above to generate results from official tapes.
             </p>
           ) : (
             <div className="overflow-x-auto">

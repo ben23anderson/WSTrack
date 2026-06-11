@@ -101,8 +101,10 @@ export function createReviewRouter(io: SocketIOServer): Router {
       });
 
       res.json({ results });
-    } catch {
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (err) {
+      console.error('[getHeatResults]', err);
+      const msg = err instanceof Error ? err.message : 'Internal server error';
+      res.status(500).json({ error: msg });
     }
   });
 
