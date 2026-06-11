@@ -47,7 +47,7 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
     const loans = await db.boatLoan.findMany({
       where: { raceId },
       include: {
-        boat: { select: { id: true, number: true, model: true } },
+        boat: { select: { id: true, number: true, boatModelId: true, boatModel: { select: { id: true, brand: true, name: true } } } },
         fromTeam: { select: { id: true, name: true } },
         toTeam: { select: { id: true, name: true } },
       },
@@ -139,7 +139,7 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
         raceId,
       },
       include: {
-        boat: { select: { id: true, number: true, model: true } },
+        boat: { select: { id: true, number: true, boatModelId: true, boatModel: { select: { id: true, brand: true, name: true } } } },
         fromTeam: { select: { id: true, name: true } },
         toTeam: { select: { id: true, name: true } },
       },

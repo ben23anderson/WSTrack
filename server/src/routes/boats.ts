@@ -12,7 +12,8 @@ export function createBoatsRouter(): Router {
     try {
       const boats = await db.boat.findMany({
         where: { teamId, deletedAt: null },
-        orderBy: [{ model: 'asc' }, { number: 'asc' }],
+        include: { boatModel: true },
+        orderBy: [{ boatModelId: 'asc' }, { number: 'asc' }],
       });
       res.json({ boats });
     } catch {
@@ -33,9 +34,10 @@ export function createBoatsRouter(): Router {
         data: {
           teamId,
           number: parsed.data.number,
-          model: parsed.data.model,
+          boatModelId: parsed.data.boat_model_id ?? null,
           isDouble: parsed.data.is_double,
         },
+        include: { boatModel: true },
       });
       res.status(201).json({ boat });
     } catch {
@@ -49,6 +51,7 @@ export function createBoatsRouter(): Router {
     try {
       const boat = await db.boat.findFirst({
         where: { id: boatId, teamId, deletedAt: null },
+        include: { boatModel: true },
       });
       if (!boat) {
         res.status(404).json({ error: 'Boat not found' });
@@ -80,9 +83,10 @@ export function createBoatsRouter(): Router {
         where: { id: boatId },
         data: {
           ...(parsed.data.number !== undefined ? { number: parsed.data.number } : {}),
-          ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
+          ...(parsed.data.boat_model_id !== undefined ? { boatModelId: parsed.data.boat_model_id ?? null } : {}),
           ...(parsed.data.is_double !== undefined ? { isDouble: parsed.data.is_double } : {}),
         },
+        include: { boatModel: true },
       });
       res.json({ boat });
     } catch {
@@ -123,7 +127,8 @@ export function createBoatsRouter(): Router {
       const created: unknown[] = [];
       for (const b of parsed.data.boats) {
         const boat = await db.boat.create({
-          data: { teamId, number: b.number, model: b.model, isDouble: b.is_double },
+          data: { teamId, number: b.number, boatModelId: b.boat_model_id ?? null, isDouble: b.is_double },
+          include: { boatModel: true },
         });
         created.push(boat);
       }

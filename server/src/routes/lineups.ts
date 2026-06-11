@@ -5,6 +5,14 @@ import { AddLineupEntrySchema } from '../lib/validation.js';
 
 const router = Router({ mergeParams: true });
 
+/** Check if any race on the day is live/review/published. */
+async function anyRaceOnDayIsLive(raceDayId: string): Promise<boolean> {
+  const liveRace = await db.race.findFirst({
+    where: { raceDayId, status: { in: ['live', 'review', 'published'] } },
+  });
+  return liveRace !== null;
+}
+
 /** Look up the raceDay and divisionId for a race. */
 async function getRaceDivision(raceId: string): Promise<{ divisionId: string; raceDayId: string } | null> {
   const race = await db.race.findUnique({
@@ -166,6 +174,11 @@ router.post('/lineups/:teamId/unsubmit', requireAuth, async (req, res): Promise<
     const lineup = await db.lineup.findUnique({ where: { teamId_raceId: { teamId, raceId } } });
     if (!lineup) { res.status(404).json({ error: 'Lineup not found' }); return; }
 
+    const raceCheck = await db.race.findUnique({ where: { id: raceId }, select: { status: true } });
+    if (raceCheck && ['live', 'review', 'published'].includes(raceCheck.status)) {
+      res.status(409).json({ error: 'Cannot unsubmit once a race is live' }); return;
+    }
+
     const updated = await db.lineup.update({
       where: { id: lineup.id },
       data: { submitted: false },
@@ -253,6 +266,10 @@ router.post('/lineups/:teamId/entries', requireAuth, async (req, res): Promise<v
     });
     if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
 
+    if (await anyRaceOnDayIsLive(race.raceDayId)) {
+      res.status(409).json({ error: 'Lineups are locked once the first race of the day has started' }); return;
+    }
+
     const allRacesOnDay = await db.race.findMany({
       where: { raceDayId: race.raceDayId },
       select: { id: true },
@@ -297,6 +314,12 @@ router.delete('/lineups/:teamId/entries/:entryId', requireAuth, async (req, res)
 
     const lineup = await db.lineup.findUnique({ where: { teamId_raceId: { teamId, raceId } } });
     if (!lineup) { res.status(404).json({ error: 'Lineup not found' }); return; }
+
+    // Get race day id for lock check
+    const raceForLock = await db.race.findUnique({ where: { id: raceId }, select: { raceDayId: true } });
+    if (raceForLock && await anyRaceOnDayIsLive(raceForLock.raceDayId)) {
+      res.status(409).json({ error: 'Lineups are locked once the first race of the day has started' }); return;
+    }
 
     if (lineup.submitted) {
       res.status(409).json({ error: 'Cannot modify a submitted lineup' }); return;

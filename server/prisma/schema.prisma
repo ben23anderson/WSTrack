@@ -36,6 +36,8 @@ model Division {
   distances       Distance[]
   classifications Classification[]
   invites         Invite[]
+  boatModels      BoatModel[]
+  raceDayTemplates RaceDayTemplate[]
 }
 
 // ─── Auth / users ──────────────────────────────────────────────────────────────
@@ -97,6 +99,7 @@ model Distance {
   division         Division          @relation(fields: [divisionId], references: [id])
   races            Race[]
   athleteBestTimes AthleteBestTime[]
+  templateRaces    RaceDayTemplateRace[]
 }
 
 model Classification {
@@ -110,6 +113,7 @@ model Classification {
   division Division  @relation(fields: [divisionId], references: [id])
   races    Race[]
   athletes Athlete[]
+  templateRaces RaceDayTemplateRace[]
 }
 
 // ─── Teams / athletes / boats ──────────────────────────────────────────────────
@@ -136,17 +140,18 @@ model Team {
 }
 
 model Athlete {
-  id                  String    @id @default(cuid()) @db.VarChar(30)
-  teamId              String    @db.VarChar(30)
-  name                String
-  grade               String?
-  photoUrl            String?
-  classificationId    String?   @db.VarChar(30)
-  preferredBoatModel  String?   @db.VarChar(50)
-  preferredBoatNumber String?   @db.VarChar(20)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  deletedAt           DateTime?
+  id                    String    @id @default(cuid()) @db.VarChar(30)
+  teamId                String    @db.VarChar(30)
+  name                  String
+  grade                 String?
+  photoUrl              String?
+  classificationId      String?   @db.VarChar(30)
+  preferredBoatModelId  String?   @db.VarChar(30)
+  preferredBoatModel    BoatModel? @relation("AthletePreferredModel", fields: [preferredBoatModelId], references: [id])
+  preferredBoatNumber   String?   @db.VarChar(20)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
 
   team           Team              @relation(fields: [teamId], references: [id])
   classification Classification?   @relation(fields: [classificationId], references: [id])
@@ -172,19 +177,21 @@ model AthleteBestTime {
 }
 
 model Boat {
-  id        String    @id @default(cuid()) @db.VarChar(30)
-  teamId    String    @db.VarChar(30)
-  number    String
-  model     String?
-  isDouble  Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id           String    @id @default(cuid()) @db.VarChar(30)
+  teamId       String    @db.VarChar(30)
+  number       String
+  boatModelId  String?   @db.VarChar(30)
+  boatModel    BoatModel? @relation("BoatToModel", fields: [boatModelId], references: [id])
+  isDouble     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
   team            Team             @relation(fields: [teamId], references: [id])
   boatAssignments BoatAssignment[]
   loansAsBoat     BoatLoan[]
   raceDayBoats    RaceDayBoat[]
+  proposedSubs    Substitution[]   @relation("ProposedBoat")
 }
 
 model BoatLoan {
@@ -296,14 +303,16 @@ model LineupEntry {
 
 // status: pending | approved | rejected
 model Substitution {
-  id           String   @id @default(cuid()) @db.VarChar(30)
-  raceId       String   @db.VarChar(30)
-  teamId       String   @db.VarChar(30)
-  outAthleteId String   @db.VarChar(30)
-  inAthleteId  String   @db.VarChar(30)
-  status       String   @default("pending") @db.VarChar(20)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid()) @db.VarChar(30)
+  raceId         String   @db.VarChar(30)
+  teamId         String   @db.VarChar(30)
+  outAthleteId   String   @db.VarChar(30)
+  inAthleteId    String   @db.VarChar(30)
+  status         String   @default("pending") @db.VarChar(20)
+  proposedBoatId String?  @db.VarChar(30)
+  proposedBoat   Boat?    @relation("ProposedBoat", fields: [proposedBoatId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   race       Race    @relation(fields: [raceId], references: [id])
   team       Team    @relation(fields: [teamId], references: [id])
@@ -478,4 +487,41 @@ model RaceDayBoat {
   team    Team    @relation(fields: [teamId], references: [id])
 
   @@id([raceDayId, boatId])
+}
+
+model BoatModel {
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  divisionId String   @db.VarChar(30)
+  brand      String   @db.VarChar(50)
+  name       String   @db.VarChar(50)
+  createdAt  DateTime @default(now())
+
+  division Division  @relation(fields: [divisionId], references: [id])
+  boats    Boat[]    @relation("BoatToModel")
+  athletes Athlete[] @relation("AthletePreferredModel")
+}
+
+model RaceDayTemplate {
+  id         String                @id @default(cuid()) @db.VarChar(30)
+  divisionId String                @db.VarChar(30)
+  name       String                @db.VarChar(100)
+  createdAt  DateTime              @default(now())
+
+  division Division               @relation(fields: [divisionId], references: [id])
+  races    RaceDayTemplateRace[]
+}
+
+model RaceDayTemplateRace {
+  id               String  @id @default(cuid()) @db.VarChar(30)
+  templateId       String  @db.VarChar(30)
+  name             String  @db.VarChar(100)
+  classificationId String? @db.VarChar(30)
+  distanceId       String? @db.VarChar(30)
+  laneCount        Int     @default(8)
+  hasFinals        Boolean @default(true)
+  orderIndex       Int     @default(0)
+
+  template       RaceDayTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  classification Classification? @relation(fields: [classificationId], references: [id])
+  distance       Distance?       @relation(fields: [distanceId], references: [id])
 }

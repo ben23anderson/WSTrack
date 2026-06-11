@@ -62,6 +62,7 @@ router.get('/substitutions', requireAuth, async (req, res): Promise<void> => {
         team: { select: { id: true, name: true } },
         outAthlete: { select: { id: true, name: true } },
         inAthlete: { select: { id: true, name: true } },
+        proposedBoat: { select: { id: true, number: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -82,6 +83,12 @@ router.post('/substitutions', requireAuth, async (req, res): Promise<void> => {
     const teamId = await getHeadCoachTeam(userId, info.divisionId);
     if (!teamId) {
       res.status(403).json({ error: 'Forbidden: head coach only' }); return;
+    }
+
+    const race = await db.race.findUnique({ where: { id: raceId }, select: { status: true } });
+    if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
+    if (['live', 'review', 'published'].includes(race.status)) {
+      res.status(409).json({ error: 'Cannot request substitution once a race is live' }); return;
     }
 
     const parsed = RequestSubstitutionSchema.safeParse(req.body);
@@ -123,11 +130,13 @@ router.post('/substitutions', requireAuth, async (req, res): Promise<void> => {
         outAthleteId: out_athlete_id,
         inAthleteId: in_athlete_id,
         status: 'pending',
+        proposedBoatId: req.body.proposed_boat_id || null,
       },
       include: {
         team: { select: { id: true, name: true } },
         outAthlete: { select: { id: true, name: true } },
         inAthlete: { select: { id: true, name: true } },
+        proposedBoat: { select: { id: true, number: true } },
       },
     });
     res.status(201).json({ substitution: sub });
@@ -165,9 +174,67 @@ router.patch('/substitutions/:substitutionId', requireAuth, async (req, res): Pr
         team: { select: { id: true, name: true } },
         outAthlete: { select: { id: true, name: true } },
         inAthlete: { select: { id: true, name: true } },
+        proposedBoat: { select: { id: true, number: true } },
       },
     });
+
+    // If approved: swap lineup entry and handle boat assignment
+    if (parsed.data.status === 'approved') {
+      const lineup = await db.lineup.findUnique({
+        where: { teamId_raceId: { teamId: substitution.team.id, raceId } },
+      });
+      if (lineup) {
+        const entry = await db.lineupEntry.findFirst({
+          where: { lineupId: lineup.id, athleteId: substitution.outAthlete.id },
+        });
+        if (entry) {
+          await db.lineupEntry.update({
+            where: { id: entry.id },
+            data: { athleteId: substitution.inAthlete.id },
+          });
+          // Apply proposed boat if specified
+          if (existing.proposedBoatId) {
+            await db.boatAssignment.upsert({
+              where: { raceId_entryId: { raceId, entryId: entry.id } },
+              update: { boatId: existing.proposedBoatId },
+              create: { raceId, entryId: entry.id, boatId: existing.proposedBoatId },
+            });
+          }
+        }
+      }
+    }
+
     res.json({ substitution });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/races/:raceId/substitutions/:substitutionId/boat
+router.patch('/substitutions/:substitutionId/boat', requireAuth, async (req, res): Promise<void> => {
+  const { raceId, substitutionId } = req.params;
+  const userId = req.session.userId!;
+  const { proposed_boat_id } = req.body as { proposed_boat_id?: string };
+  try {
+    const info = await getRaceInfo(raceId);
+    if (!info) { res.status(404).json({ error: 'Race not found' }); return; }
+    const teamId = await getHeadCoachTeam(userId, info.divisionId);
+    if (!teamId) { res.status(403).json({ error: 'Forbidden: head coach only' }); return; }
+    const sub = await db.substitution.findFirst({
+      where: { id: substitutionId, raceId, teamId, status: 'pending' },
+    });
+    if (!sub) { res.status(404).json({ error: 'Substitution not found or not pending' }); return; }
+    const updated = await db.substitution.update({
+      where: { id: substitutionId },
+      data: { proposedBoatId: proposed_boat_id || null },
+      include: {
+        team: { select: { id: true, name: true } },
+        outAthlete: { select: { id: true, name: true } },
+        inAthlete: { select: { id: true, name: true } },
+        proposedBoat: { select: { id: true, number: true } },
+      },
+    });
+    res.json({ substitution: updated });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }

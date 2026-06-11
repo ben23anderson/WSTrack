@@ -37,10 +37,10 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
     const assignments = await db.boatAssignment.findMany({
       where: { raceId },
       include: {
-        boat: { select: { id: true, number: true, model: true } },
+        boat: { select: { id: true, number: true, boatModelId: true, boatModel: { select: { id: true, brand: true, name: true } } } },
         entry: {
           include: {
-            athlete: { select: { id: true, name: true, preferredBoatModel: true, preferredBoatNumber: true } },
+            athlete: { select: { id: true, name: true, preferredBoatModelId: true, preferredBoatNumber: true } },
             lineup: { select: { teamId: true } },
           },
         },
@@ -120,10 +120,10 @@ router.put('/:entryId', requireAuth, async (req, res): Promise<void> => {
       update: { boatId: boat_id },
       create: { raceId, entryId, boatId: boat_id },
       include: {
-        boat: { select: { id: true, number: true, model: true } },
+        boat: { select: { id: true, number: true, boatModelId: true, boatModel: { select: { id: true, brand: true, name: true } } } },
         entry: {
           include: {
-            athlete: { select: { id: true, name: true, preferredBoatModel: true, preferredBoatNumber: true } },
+            athlete: { select: { id: true, name: true, preferredBoatModelId: true, preferredBoatNumber: true } },
             lineup: { select: { teamId: true } },
           },
         },

@@ -122,7 +122,7 @@ export async function getBoatConflictLevels(
 export async function getAvailableBoats(
   raceId: string,
   teamId: string
-): Promise<{ id: string; number: string; model: string | null; isLoaned: boolean; conflictLevel: ConflictLevel }[]> {
+): Promise<{ id: string; number: string; boatModelId: string | null; boatModelLabel: string | null; isLoaned: boolean; conflictLevel: ConflictLevel }[]> {
   const race = await db.race.findUnique({
     where: { id: raceId },
     select: { raceDayId: true },
@@ -141,33 +141,36 @@ export async function getAvailableBoats(
         some: { raceDayId: race.raceDayId },
       },
     },
-    orderBy: [{ model: 'asc' }, { number: 'asc' }],
+    include: { boatModel: true },
+    orderBy: [{ boatModelId: 'asc' }, { number: 'asc' }],
   });
 
   // Loaned boats for this race
   const loans = await db.boatLoan.findMany({
     where: { raceId, toTeamId: teamId },
-    include: { boat: true },
+    include: { boat: { include: { boatModel: true } } },
   });
 
   const result = [
     ...ownBoats.map((b) => ({
       id: b.id,
       number: b.number,
-      model: b.model,
+      boatModelId: b.boatModelId,
+      boatModelLabel: b.boatModel ? `${b.boatModel.brand} ${b.boatModel.name}` : null,
       isLoaned: false,
       conflictLevel: conflictLevels.get(b.id) ?? ('none' as ConflictLevel),
     })),
     ...loans.map((l) => ({
       id: l.boat.id,
       number: l.boat.number,
-      model: l.boat.model,
+      boatModelId: l.boat.boatModelId,
+      boatModelLabel: l.boat.boatModel ? `${l.boat.boatModel.brand} ${l.boat.boatModel.name}` : null,
       isLoaned: true,
       conflictLevel: conflictLevels.get(l.boat.id) ?? ('none' as ConflictLevel),
     })),
   ];
 
-  result.sort((a, b) => (a.model ?? '').localeCompare(b.model ?? '') || a.number.localeCompare(b.number));
+  result.sort((a, b) => (a.boatModelLabel ?? '').localeCompare(b.boatModelLabel ?? '') || a.number.localeCompare(b.number));
   return result;
 }
 
@@ -193,7 +196,11 @@ export async function computeAutoAssignments(
       entries: {
         include: {
           athlete: {
-            include: {
+            select: {
+              id: true,
+              name: true,
+              preferredBoatModelId: true,
+              preferredBoatNumber: true,
               bestTimes: { where: { distanceId: race.distanceId } },
             },
           },
@@ -234,8 +241,8 @@ export async function computeAutoAssignments(
       const aNumMatch = athlete.preferredBoatNumber && a.number === athlete.preferredBoatNumber ? 0 : 1;
       const bNumMatch = athlete.preferredBoatNumber && b.number === athlete.preferredBoatNumber ? 0 : 1;
       if (aNumMatch !== bNumMatch) return aNumMatch - bNumMatch;
-      const aModMatch = athlete.preferredBoatModel && a.model === athlete.preferredBoatModel ? 0 : 1;
-      const bModMatch = athlete.preferredBoatModel && b.model === athlete.preferredBoatModel ? 0 : 1;
+      const aModMatch = athlete.preferredBoatModelId && a.boatModelId === athlete.preferredBoatModelId ? 0 : 1;
+      const bModMatch = athlete.preferredBoatModelId && b.boatModelId === athlete.preferredBoatModelId ? 0 : 1;
       if (aModMatch !== bModMatch) return aModMatch - bModMatch;
       return conflictOrder(a.conflictLevel) - conflictOrder(b.conflictLevel);
     });

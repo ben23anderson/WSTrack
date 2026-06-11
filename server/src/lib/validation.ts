@@ -59,7 +59,7 @@ export const CreateAthleteSchema = z.object({
   name: z.string().min(1),
   grade: z.string().optional(),
   classificationId: z.string().cuid().optional(),
-  preferred_boat_model: z.string().optional(),
+  preferred_boat_model_id: z.string().optional(),
   preferred_boat_number: z.string().optional(),
 });
 
@@ -67,7 +67,7 @@ export const UpdateAthleteSchema = z.object({
   name: z.string().min(1).optional(),
   grade: z.string().optional(),
   classificationId: z.string().cuid().optional(),
-  preferred_boat_model: z.string().optional().nullable(),
+  preferred_boat_model_id: z.string().optional().nullable(),
   preferred_boat_number: z.string().optional().nullable(),
 });
 
@@ -82,7 +82,7 @@ export const UpsertBestTimeSchema = z.object({
 
 export const CreateBoatSchema = z.object({
   number: z.string().min(1),
-  model: z.string().optional(),
+  boat_model_id: z.string().optional(),
   is_double: z.boolean().default(false),
 });
 

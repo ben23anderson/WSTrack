@@ -27,6 +27,9 @@ import boatAssignmentsRouter from './routes/boatAssignments.js';
 import boatLoansRouter from './routes/boatLoans.js';
 import seedingRouter from './routes/seeding.js';
 import finalsRouter from './routes/finals.js';
+import boatModelsRouter from './routes/boatModels.js';
+import raceDayTemplatesRouter from './routes/raceDayTemplates.js';
+import publicRouter from './routes/public.js';
 import leaguesRouter from './routes/leagues.js';
 
 export function createApp(): express.Application {
@@ -68,6 +71,9 @@ export function createApp(): express.Application {
   app.use('/api/races/:raceId/boat-loans', boatLoansRouter);
   app.use('/api/races/:raceId', seedingRouter);
   app.use('/api/races/:raceId', finalsRouter);
+  app.use('/api/divisions/:divisionId/boat-models', boatModelsRouter);
+  app.use('/api/divisions/:divisionId/race-day-templates', raceDayTemplatesRouter);
+  app.use('/api/public', publicRouter);
 
   // In production, serve the built React client from server/public
   if (config.NODE_ENV === 'production') {

@@ -57,6 +57,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
           classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
         orderBy: { name: 'asc' },
       });
@@ -82,7 +83,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           name: parsed.data.name,
           grade: parsed.data.grade,
           ...(parsed.data.classificationId ? { classificationId: parsed.data.classificationId } : {}),
-          ...(parsed.data.preferred_boat_model ? { preferredBoatModel: parsed.data.preferred_boat_model } : {}),
+          ...(parsed.data.preferred_boat_model_id ? { preferredBoatModelId: parsed.data.preferred_boat_model_id } : {}),
           ...(parsed.data.preferred_boat_number ? { preferredBoatNumber: parsed.data.preferred_boat_number } : {}),
         },
         include: {
@@ -90,6 +91,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
           classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
       });
       res.status(201).json({ athlete });
@@ -110,6 +112,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
           classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
       });
       if (!athlete) {
@@ -145,7 +148,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
           ...(parsed.data.grade !== undefined ? { grade: parsed.data.grade } : {}),
           ...(parsed.data.classificationId !== undefined ? { classificationId: parsed.data.classificationId } : {}),
-          ...(parsed.data.preferred_boat_model !== undefined ? { preferredBoatModel: parsed.data.preferred_boat_model ?? null } : {}),
+          ...(parsed.data.preferred_boat_model_id !== undefined ? { preferredBoatModelId: parsed.data.preferred_boat_model_id ?? null } : {}),
           ...(parsed.data.preferred_boat_number !== undefined ? { preferredBoatNumber: parsed.data.preferred_boat_number ?? null } : {}),
         },
         include: {
@@ -153,6 +156,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
           classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
       });
       res.json({ athlete });
@@ -220,6 +224,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
               include: { distance: { select: { id: true, label: true, sortOrder: true } } },
             },
             classification: { select: { id: true, label: true } },
+            preferredBoatModel: { select: { id: true, brand: true, name: true } },
           },
         });
         res.json({ athlete });
@@ -312,10 +317,10 @@ export function createAthletesRouter(storage: StorageProvider): Router {
             name: a.name,
             grade: a.grade,
             ...(a.classificationId ? { classificationId: a.classificationId } : {}),
-            ...(a.preferred_boat_model ? { preferredBoatModel: a.preferred_boat_model } : {}),
+            ...(a.preferred_boat_model_id ? { preferredBoatModelId: a.preferred_boat_model_id } : {}),
             ...(a.preferred_boat_number ? { preferredBoatNumber: a.preferred_boat_number } : {}),
           },
-          include: { classification: { select: { id: true, label: true } }, bestTimes: { include: { distance: { select: { id: true, label: true, sortOrder: true } } } } },
+          include: { classification: { select: { id: true, label: true } }, bestTimes: { include: { distance: { select: { id: true, label: true, sortOrder: true } } } }, preferredBoatModel: { select: { id: true, brand: true, name: true } } },
         });
         created.push(athlete);
       }
