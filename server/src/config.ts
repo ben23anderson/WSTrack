@@ -19,7 +19,7 @@ const envSchema = z.object({
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
   EMAIL_FROM: z.string().default('noreply@wstrack.app'),
-  APP_BASE_URL: z.string().default('http://localhost:5173'),
+  APP_BASE_URL: z.string().url('APP_BASE_URL must be a valid URL (e.g. https://example.com)').default('http://localhost:5173').transform((url) => url.replace(/\/$/, '')),
 });
 
 export const config = envSchema.parse(process.env);

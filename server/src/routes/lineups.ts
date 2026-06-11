@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../lib/db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { AddLineupEntrySchema } from '../lib/validation.js';
+import { AddLineupEntrySchema, BulkAddLineupEntriesSchema } from '../lib/validation.js';
 
 const router = Router({ mergeParams: true });
 
@@ -72,19 +72,25 @@ router.get('/lineups', requireAuth, async (req, res): Promise<void> => {
     const coord = await isCoordinator(userId, divisionId);
     const coachTeamId = coord ? null : await getHeadCoachTeam(userId, divisionId);
 
-    const lineups = await db.lineup.findMany({
-      where: {
-        raceId,
-        ...(coachTeamId ? { teamId: coachTeamId } : {}),
-      },
-      include: {
-        team: { select: { id: true, name: true } },
-        entries: {
-          include: { athlete: { select: { id: true, name: true } } },
+    const [lineups, race] = await Promise.all([
+      db.lineup.findMany({
+        where: {
+          raceId,
+          ...(coachTeamId ? { teamId: coachTeamId } : {}),
         },
-      },
-    });
-    res.json({ lineups });
+        include: {
+          team: { select: { id: true, name: true } },
+          entries: {
+            include: { athlete: { select: { id: true, name: true } } },
+          },
+        },
+      }),
+      db.race.findUnique({
+        where: { id: raceId },
+        select: { distanceId: true, distance: { select: { id: true, label: true } } },
+      }),
+    ]);
+    res.json({ lineups, race });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -295,6 +301,84 @@ router.post('/lineups/:teamId/entries', requireAuth, async (req, res): Promise<v
       include: { athlete: { select: { id: true, name: true, grade: true } } },
     });
     res.status(201).json({ entry });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/races/:raceId/lineups/:teamId/entries/bulk
+router.post('/lineups/:teamId/entries/bulk', requireAuth, async (req, res): Promise<void> => {
+  const { raceId, teamId } = req.params;
+  const userId = req.session.userId!;
+  try {
+    const membership = await db.membership.findFirst({
+      where: { userId, role: 'head_coach', teamId },
+    });
+    if (!membership) {
+      res.status(403).json({ error: 'Forbidden: head coach only' }); return;
+    }
+
+    const parsed = BulkAddLineupEntriesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' }); return;
+    }
+    const { athlete_ids } = parsed.data;
+
+    const validAthletes = await db.athlete.findMany({
+      where: { id: { in: athlete_ids }, teamId, deletedAt: null },
+      select: { id: true },
+    });
+    const validIds = new Set(validAthletes.map((a) => a.id));
+
+    const lineup = await db.lineup.upsert({
+      where: { teamId_raceId: { teamId, raceId } },
+      update: {},
+      create: { teamId, raceId },
+    });
+    if (lineup.submitted) {
+      res.status(409).json({ error: 'Lineup is already submitted' }); return;
+    }
+
+    const race = await db.race.findUnique({ where: { id: raceId }, select: { raceDayId: true } });
+    if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
+
+    const allRacesOnDay = await db.race.findMany({
+      where: { raceDayId: race.raceDayId },
+      select: { id: true },
+    });
+    const raceIds = allRacesOnDay.map((r) => r.id);
+
+    const existing = await db.lineupEntry.findMany({
+      where: { athleteId: { in: athlete_ids }, lineup: { raceId: { in: raceIds } } },
+      select: { athleteId: true },
+    });
+    const alreadyEntered = new Set(existing.map((e) => e.athleteId));
+
+    const entries = [];
+    const errors: { athleteId: string; message: string }[] = [];
+
+    for (const athleteId of athlete_ids) {
+      if (!validIds.has(athleteId)) {
+        errors.push({ athleteId, message: 'Athlete not found on this team' });
+        continue;
+      }
+      if (alreadyEntered.has(athleteId)) {
+        errors.push({ athleteId, message: 'Athlete is already entered in another race today' });
+        continue;
+      }
+      try {
+        const entry = await db.lineupEntry.create({
+          data: { lineupId: lineup.id, athleteId },
+          include: { athlete: { select: { id: true, name: true, grade: true } } },
+        });
+        entries.push(entry);
+        alreadyEntered.add(athleteId);
+      } catch {
+        errors.push({ athleteId, message: 'Failed to add athlete' });
+      }
+    }
+
+    res.status(201).json({ entries, errors });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
