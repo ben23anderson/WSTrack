@@ -373,7 +373,7 @@ export default function RaceDetail() {
                 .map((heat) => (
                   <Link
                     key={heat.id}
-                    to={`/heats/${heat.id}/officiate?raceId=${raceId ?? ''}`}
+                    to={`/heats/${heat.id}/officiate?raceId=${raceId ?? ''}${raceDayId ? `&raceDayId=${raceDayId}` : ''}`}
                     className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl px-5 py-3 text-sm min-h-11 transition-colors"
                   >
                     Start Heat {heat.heatNumber} →
@@ -386,7 +386,7 @@ export default function RaceDetail() {
         {/* Navigation links */}
         <div className="flex flex-wrap gap-2">
           <Link
-            to={`/races/${raceId}/heats`}
+            to={`/races/${raceId}/heats${raceDayId ? `?raceDayId=${raceDayId}` : ''}`}
             className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
           >
             View Heat Sheet

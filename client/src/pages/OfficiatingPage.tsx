@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
+import PageNav from '../components/PageNav.js';
+import type { NavCrumb } from '../components/PageNav.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { ApiError } from '../api/client.js';
 import { getHeats } from '../api/seeding.js';
@@ -92,6 +94,17 @@ export default function OfficiatingPage() {
 
   const searchParams = new URLSearchParams(window.location.search);
   const raceIdFromParams = searchParams.get('raceId');
+  const raceDayIdFromParams = searchParams.get('raceDayId');
+
+  const crumbs: NavCrumb[] = [];
+  if (raceDayIdFromParams) crumbs.push({ label: 'Race Day', to: `/race-days/${raceDayIdFromParams}` });
+  if (raceIdFromParams) crumbs.push({ label: 'Race', to: `/races/${raceIdFromParams}` });
+  if (raceIdFromParams) {
+    crumbs.push({
+      label: 'Heat Sheet',
+      to: `/races/${raceIdFromParams}/heats${raceDayIdFromParams ? `?raceDayId=${raceDayIdFromParams}` : ''}`,
+    });
+  }
 
   const heatsQuery = useQuery<{ heats: HeatData[] }, ApiError>({
     queryKey: ['heats', raceIdFromParams],
@@ -195,15 +208,12 @@ export default function OfficiatingPage() {
   return (
     <Layout>
       <div className="space-y-4 max-w-2xl mx-auto">
+        {/* Nav */}
+        <PageNav crumbs={crumbs} />
+
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {raceIdFromParams && (
-              <Link to={`/races/${raceIdFromParams}/heats`} className="text-blue-600 hover:text-blue-800 text-sm">
-                ← Heat Sheet
-              </Link>
-            )}
-          </div>
+          <div />
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${socketState.connected ? 'bg-green-500' : 'bg-red-500'}`}

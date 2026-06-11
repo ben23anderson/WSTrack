@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
+import PageNav from '../components/PageNav.js';
+import type { NavCrumb } from '../components/PageNav.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { ApiError } from '../api/client.js';
 import { seedRace, getHeats, deleteHeats } from '../api/seeding.js';
@@ -20,10 +22,12 @@ interface HeatCardProps {
   heat: HeatData;
   centerLane: number;
   raceId: string;
+  raceDayId: string | null;
   isOfficial: boolean;
 }
 
-function HeatCard({ heat, centerLane, raceId, isOfficial }: HeatCardProps) {
+function HeatCard({ heat, centerLane, raceId, raceDayId, isOfficial }: HeatCardProps) {
+  const ctx = `raceId=${raceId}${raceDayId ? `&raceDayId=${raceDayId}` : ''}`;
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-start justify-between">
@@ -34,7 +38,7 @@ function HeatCard({ heat, centerLane, raceId, isOfficial }: HeatCardProps) {
         <div className="flex gap-2 flex-shrink-0">
           {isOfficial && (
             <Link
-              to={`/heats/${heat.id}/officiate?raceId=${raceId}`}
+              to={`/heats/${heat.id}/officiate?${ctx}`}
               className="text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-2 py-1 font-medium"
             >
               Officiate
@@ -42,14 +46,14 @@ function HeatCard({ heat, centerLane, raceId, isOfficial }: HeatCardProps) {
           )}
           {isOfficial && (
             <Link
-              to={`/heats/${heat.id}/review`}
+              to={`/heats/${heat.id}/review?${ctx}`}
               className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg px-2 py-1 font-medium border border-amber-300"
             >
               Review
             </Link>
           )}
           <Link
-            to={`/heats/${heat.id}/live?raceId=${raceId}`}
+            to={`/heats/${heat.id}/live?${ctx}`}
             className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2 py-1 font-medium border border-gray-300"
           >
             Live View
@@ -115,6 +119,8 @@ export default function HeatSheetPage() {
   const { memberships } = useAuthContext();
   const queryClient = useQueryClient();
 
+  const raceDayId = new URLSearchParams(window.location.search).get('raceDayId');
+
   const [strategy, setStrategy] = useState<'snake' | 'random'>('snake');
   const [balanceTeams, setBalanceTeams] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -147,6 +153,10 @@ export default function HeatSheetPage() {
   const isOfficial = memberships.some((m) => m.role === 'official' || m.role === 'coordinator');
   const heats = heatsQuery.data?.heats ?? [];
   const hasHeats = heats.length > 0;
+
+  const crumbs: NavCrumb[] = [];
+  if (raceDayId) crumbs.push({ label: 'Race Day', to: `/race-days/${raceDayId}` });
+  if (raceId) crumbs.push({ label: 'Race', to: `/races/${raceId}${raceDayId ? `?raceDayId=${raceDayId}` : ''}` });
 
   // Compute center lane: for a given heat, use the first lane assignment's lane
   // as a proxy (center is determined by laneCount, not easily known here).
@@ -186,18 +196,11 @@ export default function HeatSheetPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Link
-            to={`/races/${raceId}`}
-            className="text-blue-600 hover:text-blue-800 text-sm"
-          >
-            ← Race
-          </Link>
-        </div>
+        {/* Nav */}
+        <PageNav crumbs={crumbs} />
+
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Heat Sheet</h1>
-          <p className="text-sm text-gray-500 mt-1">Race ID: {raceId}</p>
         </div>
 
         {/* Coordinator controls */}
@@ -302,6 +305,7 @@ export default function HeatSheetPage() {
                 heat={heat}
                 centerLane={centerLaneGuess}
                 raceId={raceId!}
+                raceDayId={raceDayId}
                 isOfficial={isOfficial}
               />
             ))}

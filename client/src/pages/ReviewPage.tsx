@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
+import PageNav from '../components/PageNav.js';
+import type { NavCrumb } from '../components/PageNav.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { ApiError } from '../api/client.js';
 import {
@@ -146,9 +148,23 @@ export default function ReviewPage() {
   const [actionError, setActionError] = useState('');
   const [finalizeSuccess, setFinalizeSuccess] = useState(false);
 
+  const searchParams = new URLSearchParams(window.location.search);
+  const raceIdParam = searchParams.get('raceId');
+  const raceDayIdParam = searchParams.get('raceDayId');
+
   const isOfficial = memberships.some((m) => m.role === 'official' || m.role === 'coordinator');
-  // Simplification: treat any official/coordinator as potential primary official for UI
   const isPrimary = isOfficial;
+
+  // Build breadcrumb nav
+  const crumbs: NavCrumb[] = [];
+  if (raceDayIdParam) crumbs.push({ label: 'Race Day', to: `/race-days/${raceDayIdParam}` });
+  if (raceIdParam) crumbs.push({ label: 'Race', to: `/races/${raceIdParam}` });
+  if (raceIdParam) {
+    crumbs.push({
+      label: 'Heat Sheet',
+      to: `/races/${raceIdParam}/heats${raceDayIdParam ? `?raceDayId=${raceDayIdParam}` : ''}`,
+    });
+  }
 
   const resultsQuery = useQuery<{ results: ResultData[] }, ApiError>({
     queryKey: ['heat-results', heatId],
@@ -192,12 +208,9 @@ export default function ReviewPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Link to={`/races`} className="text-blue-600 hover:text-blue-800 text-sm">
-            ← Back
-          </Link>
-        </div>
+        {/* Nav */}
+        <PageNav crumbs={crumbs} />
+
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Heat Review</h1>
           <p className="text-sm text-gray-500 mt-1">Heat ID: {heatId}</p>
@@ -237,7 +250,9 @@ export default function ReviewPage() {
                     ? 'bg-green-50 text-green-700 border border-green-200'
                     : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
                 }`}>
-                  {reconcileAllAgreed ? 'All officials agreed — no conflicts.' : 'Some entries need review (conflicts detected).'}
+                  {reconcileAllAgreed
+                    ? 'All officials agreed — no conflicts.'
+                    : 'Some entries need review (conflicts detected).'}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -284,7 +299,9 @@ export default function ReviewPage() {
               <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : !hasResults ? (
-            <p className="px-4 py-4 text-sm text-gray-400">No results recorded yet.</p>
+            <p className="px-4 py-4 text-sm text-gray-400">
+              No results yet — use "Apply &amp; Save Reconciliation" above to generate results from official tapes.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -313,7 +330,7 @@ export default function ReviewPage() {
           )}
         </section>
 
-        {/* Finalize button */}
+        {/* Finalize */}
         {isPrimary && (
           <section>
             {finalizeSuccess ? (
@@ -321,17 +338,24 @@ export default function ReviewPage() {
                 Heat finalized successfully.
               </div>
             ) : (
-              <button
-                onClick={() => {
-                  if (confirm('Finalize this heat? This marks results as complete.')) {
-                    finalizeMutation.mutate();
-                  }
-                }}
-                disabled={finalizeMutation.isPending || !hasResults}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold rounded-xl px-4 py-3 text-sm min-h-11 transition-colors"
-              >
-                {finalizeMutation.isPending ? 'Finalizing…' : 'Finalize Heat'}
-              </button>
+              <div className="space-y-2">
+                {!hasResults && (
+                  <p className="text-xs text-gray-400">
+                    Apply reconciliation above to generate results before finalizing.
+                  </p>
+                )}
+                <button
+                  onClick={() => {
+                    if (confirm('Finalize this heat? This marks results as complete.')) {
+                      finalizeMutation.mutate();
+                    }
+                  }}
+                  disabled={finalizeMutation.isPending}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold rounded-xl px-4 py-3 text-sm min-h-11 transition-colors"
+                >
+                  {finalizeMutation.isPending ? 'Finalizing…' : 'Finalize Heat'}
+                </button>
+              </div>
             )}
           </section>
         )}
