@@ -193,6 +193,11 @@ router.post('/auto-assign', requireAuth, async (req, res): Promise<void> => {
     const race = await db.race.findUnique({ where: { id: raceId } });
     if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
 
+    const heatCount = await db.heat.count({ where: { raceId } });
+    if (heatCount === 0) {
+      res.status(409).json({ error: 'Cannot auto-assign boats before heats are generated' }); return;
+    }
+
     const proposed = await computeAutoAssignments(raceId, teamId);
     const { save } = bodyParsed.data;
 

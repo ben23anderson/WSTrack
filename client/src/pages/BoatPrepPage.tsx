@@ -352,7 +352,7 @@ function RaceAssignmentsPanel({
         <h4 className="text-sm font-semibold text-gray-700">
           {race.classification?.label ?? 'Open'} &middot; {race.distance?.label}
         </h4>
-        {isHeadCoach && singleEntries.length > 0 && (
+        {isHeadCoach && singleEntries.length > 0 && !['setup', 'boat_prep'].includes(race.status) && (
           <button
             type="button"
             onClick={() => autoAssignMutation.mutate()}

@@ -175,10 +175,41 @@ export async function getAvailableBoats(
 }
 
 /**
+ * Returns whether an athlete's preferences match a given boat
+ * (by exact number or by model).
+ */
+function prefersBoat(
+  prefs: { preferredBoatNumber: string | null; preferredBoatModelId: string | null },
+  boat: { number: string; boatModelId: string | null }
+): boolean {
+  if (prefs.preferredBoatNumber && prefs.preferredBoatNumber === boat.number) return true;
+  if (prefs.preferredBoatModelId && prefs.preferredBoatModelId === boat.boatModelId) return true;
+  return false;
+}
+
+/** Lower = higher priority (0 = exact number, 1 = model, 2 = none). */
+function prefPriority(
+  prefs: { preferredBoatNumber: string | null; preferredBoatModelId: string | null },
+  boat: { number: string; boatModelId: string | null }
+): number {
+  if (prefs.preferredBoatNumber && prefs.preferredBoatNumber === boat.number) return 0;
+  if (prefs.preferredBoatModelId && prefs.preferredBoatModelId === boat.boatModelId) return 1;
+  return 2;
+}
+
+/**
  * Auto-assign boats for a team's single-kayak entries in a race.
- * Strategy: sort entries by best time, apply athlete preferences
- * (preferred number first, then preferred model, then any available).
- * Prefer non-conflicted boats at each step.
+ *
+ * Rules:
+ * - Requires heats to exist; returns [] immediately if none.
+ * - Iterates entries fastest → slowest.
+ * - Prefers safe boats (none / 2_heats conflict); within safe boats
+ *   preference order is exact-number > model > any.
+ * - A 1_heat-conflicted boat is only assigned when BOTH the current
+ *   athlete AND the athlete who has it in the conflicting race prefer it.
+ *   The faster athlete wins (guaranteed by fastest-first iteration).
+ *   The assignment is still flagged via conflictLevel='1_heat'.
+ * - Unavailable boats (0-heat gap) are never assigned.
  */
 export async function computeAutoAssignments(
   raceId: string,
@@ -189,6 +220,10 @@ export async function computeAutoAssignments(
     select: { raceDayId: true, distanceId: true },
   });
   if (!race) return [];
+
+  // Heats must exist before auto-assign can reason about gaps
+  const heatCount = await db.heat.count({ where: { raceId } });
+  if (heatCount === 0) return [];
 
   const lineup = await db.lineup.findUnique({
     where: { teamId_raceId: { teamId, raceId } },
@@ -224,32 +259,93 @@ export async function computeAutoAssignments(
       return tA - tB;
     });
 
-  // Own non-loaned boats only for auto-assign
   const availableBoats = (await getAvailableBoats(raceId, teamId)).filter((b) => !b.isLoaned);
-  const conflictOrder = (cl: ConflictLevel) => cl === 'none' ? 0 : cl === '2_heats' ? 1 : cl === '1_heat' ? 2 : 3;
+
+  // Build map: boatId → other athletes' preferences (from OTHER races on this race day).
+  // Used to enforce the mutual-preference rule for 1-heat conflicted boats.
+  const allRaceIds = (await db.race.findMany({
+    where: { raceDayId: race.raceDayId },
+    select: { id: true },
+  })).map((r) => r.id);
+
+  const otherAssignments = await db.boatAssignment.findMany({
+    where: { raceId: { in: allRaceIds.filter((id) => id !== raceId) } },
+    select: {
+      boatId: true,
+      entry: {
+        select: {
+          athlete: {
+            select: { preferredBoatNumber: true, preferredBoatModelId: true },
+          },
+        },
+      },
+    },
+  });
+
+  const otherAthletePrefs = new Map<
+    string,
+    { preferredBoatNumber: string | null; preferredBoatModelId: string | null }[]
+  >();
+  for (const a of otherAssignments) {
+    const list = otherAthletePrefs.get(a.boatId) ?? [];
+    list.push({
+      preferredBoatNumber: a.entry.athlete.preferredBoatNumber,
+      preferredBoatModelId: a.entry.athlete.preferredBoatModelId,
+    });
+    otherAthletePrefs.set(a.boatId, list);
+  }
+
+  const conflictOrder = (cl: ConflictLevel) =>
+    cl === 'none' ? 0 : cl === '2_heats' ? 1 : cl === '1_heat' ? 2 : 3;
 
   const assignments: { entryId: string; boatId: string; conflictLevel: ConflictLevel }[] = [];
   const usedBoatIds = new Set<string>();
 
   for (const entry of unassignedEntries) {
-    const athlete = entry.athlete;
+    const athletePrefs = {
+      preferredBoatNumber: entry.athlete.preferredBoatNumber,
+      preferredBoatModelId: entry.athlete.preferredBoatModelId,
+    };
+
     const remaining = availableBoats.filter((b) => !usedBoatIds.has(b.id));
     if (remaining.length === 0) break;
 
-    // Sort remaining: first preferred number exact match, then preferred model, then rest; within each group prefer lower conflict
-    const sorted = [...remaining].sort((a, b) => {
-      const aNumMatch = athlete.preferredBoatNumber && a.number === athlete.preferredBoatNumber ? 0 : 1;
-      const bNumMatch = athlete.preferredBoatNumber && b.number === athlete.preferredBoatNumber ? 0 : 1;
-      if (aNumMatch !== bNumMatch) return aNumMatch - bNumMatch;
-      const aModMatch = athlete.preferredBoatModelId && a.boatModelId === athlete.preferredBoatModelId ? 0 : 1;
-      const bModMatch = athlete.preferredBoatModelId && b.boatModelId === athlete.preferredBoatModelId ? 0 : 1;
-      if (aModMatch !== bModMatch) return aModMatch - bModMatch;
-      return conflictOrder(a.conflictLevel) - conflictOrder(b.conflictLevel);
+    // ── Tier 1: safe boats (none or 2_heats gap) ──────────────────────────
+    const safeBoats = remaining.filter(
+      (b) => b.conflictLevel === 'none' || b.conflictLevel === '2_heats'
+    );
+
+    if (safeBoats.length > 0) {
+      const sorted = [...safeBoats].sort((a, b) => {
+        const pa = prefPriority(athletePrefs, a);
+        const pb = prefPriority(athletePrefs, b);
+        if (pa !== pb) return pa - pb;
+        return conflictOrder(a.conflictLevel) - conflictOrder(b.conflictLevel);
+      });
+      const boat = sorted[0];
+      usedBoatIds.add(boat.id);
+      assignments.push({ entryId: entry.id, boatId: boat.id, conflictLevel: boat.conflictLevel });
+      continue;
+    }
+
+    // ── Tier 2: 1_heat conflicted boats — only if BOTH athletes prefer it ─
+    const oneHeatBoats = remaining.filter((b) => b.conflictLevel === '1_heat');
+    const eligible = oneHeatBoats.filter((boat) => {
+      if (!prefersBoat(athletePrefs, boat)) return false;
+      const others = otherAthletePrefs.get(boat.id) ?? [];
+      return others.some((other) => prefersBoat(other, boat));
     });
 
-    const boat = sorted[0];
-    usedBoatIds.add(boat.id);
-    assignments.push({ entryId: entry.id, boatId: boat.id, conflictLevel: boat.conflictLevel });
+    if (eligible.length > 0) {
+      const sorted = [...eligible].sort(
+        (a, b) => prefPriority(athletePrefs, a) - prefPriority(athletePrefs, b)
+      );
+      const boat = sorted[0];
+      usedBoatIds.add(boat.id);
+      // conflictLevel '1_heat' on the result serves as the visible flag
+      assignments.push({ entryId: entry.id, boatId: boat.id, conflictLevel: boat.conflictLevel });
+    }
+    // unavailable boats (0-heat gap) are never assigned; leave entry unassigned
   }
 
   return assignments;
