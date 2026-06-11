@@ -49,6 +49,30 @@ async function isDivisionMember(userId: string, divisionId: string): Promise<boo
   return membership !== null;
 }
 
+// GET /api/races/:raceId — direct race metadata (used by RaceDetail page)
+router.get('/', requireAuth, async (req, res): Promise<void> => {
+  const { raceId } = req.params;
+  const userId = req.session.userId!;
+  try {
+    const raceInfo = await getRaceDivision(raceId);
+    if (!raceInfo) { res.status(404).json({ error: 'Race not found' }); return; }
+    if (!await isDivisionMember(userId, raceInfo.divisionId)) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    const race = await db.race.findUnique({
+      where: { id: raceId },
+      include: {
+        classification: { select: { id: true, label: true, isDoubles: true } },
+        distance: { select: { id: true, label: true } },
+      },
+    });
+    if (!race) { res.status(404).json({ error: 'Race not found' }); return; }
+    res.json({ race });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /api/races/:raceId/seed
 router.post('/seed', requireAuth, async (req, res): Promise<void> => {
   const { raceId } = req.params;

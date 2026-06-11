@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { getTeam, getMembers, inviteUser, updateMember, removeMember } from '../api/teams.js';
@@ -16,7 +16,6 @@ const DEFAULT_PERMISSIONS: AssistantPermissions = {
 export default function TeamDetail() {
   const { teamId } = useParams<{ teamId: string }>();
   const { user, memberships } = useAuthContext();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [inviteEmail, setInviteEmail] = useState('');
@@ -118,32 +117,48 @@ export default function TeamDetail() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <button
-            onClick={() => navigate(-1)}
+          <Link
+            to={`/divisions/${team.division.id}/teams`}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
             ← Back
-          </button>
+          </Link>
           <p className="text-sm text-gray-500 mt-1">{team.division.name}</p>
           <h1 className="text-2xl font-bold text-gray-900">{team.name}</h1>
         </div>
 
         <section>
-          <h2 className="text-base font-semibold text-gray-700 mb-3">Team Pages</h2>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              to={`/teams/${teamId}/roster`}
-              className="inline-flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 hover:text-blue-700 transition-colors"
-            >
-              Roster
-            </Link>
-            <Link
-              to={`/teams/${teamId}/boats`}
-              className="inline-flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 hover:text-blue-700 transition-colors"
-            >
-              Boat Inventory
-            </Link>
-          </div>
+          <nav className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {[
+              {
+                label: 'Roster',
+                description: 'Athletes and best times',
+                to: `/teams/${teamId}/roster`,
+                color: 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700',
+              },
+              {
+                label: 'Boat Inventory',
+                description: 'Team boats and equipment',
+                to: `/teams/${teamId}/boats`,
+                color: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700',
+              },
+              {
+                label: 'Race Days',
+                description: 'View upcoming and past races',
+                to: `/divisions/${team.division.id}/race-days`,
+                color: 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700',
+              },
+            ].map((card) => (
+              <Link
+                key={card.to}
+                to={card.to}
+                className={`flex flex-col gap-1 border rounded-xl px-5 py-4 min-h-11 transition-colors ${card.color}`}
+              >
+                <span className="font-semibold text-base">{card.label}</span>
+                <span className="text-xs opacity-70">{card.description}</span>
+              </Link>
+            ))}
+          </nav>
         </section>
 
         {isHeadCoach && members.length > 0 && (

@@ -78,3 +78,7 @@ export async function deleteRace(raceDayId: string, raceId: string): Promise<{ o
     method: 'DELETE',
   });
 }
+
+export async function getRaceInfo(raceId: string): Promise<RaceResponse> {
+  return apiFetch<RaceResponse>(`/races/${raceId}`);
+}

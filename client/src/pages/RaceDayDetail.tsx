@@ -5,7 +5,7 @@ import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { getRaceDay } from '../api/raceDays.js';
 import type { RaceDayData } from '../api/raceDays.js';
-import { createRace } from '../api/races.js';
+import { createRace, deleteRace } from '../api/races.js';
 import type { RaceData } from '../api/races.js';
 import { listDistances, listClassifications } from '../api/divisionConfig.js';
 import type { DistanceData, ClassificationData } from '../api/divisionConfig.js';
@@ -105,6 +105,14 @@ export default function RaceDayDetail() {
       setFormError('');
     },
     onError: (err: ApiError) => setFormError(err.message),
+  });
+
+  const deleteRaceMutation = useMutation({
+    mutationFn: (raceId: string) => deleteRace(raceDayId!, raceId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['racesDirect', raceDayId] });
+      void queryClient.invalidateQueries({ queryKey: ['raceDayWithDiv'] });
+    },
   });
 
   const handleAddRace = (e: React.FormEvent) => {
@@ -254,6 +262,19 @@ export default function RaceDayDetail() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
                           </Link>
+                        )}
+                        {isCoordinator && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Delete this race and all its data? This cannot be undone.')) {
+                                deleteRaceMutation.mutate(race.id);
+                              }
+                            }}
+                            disabled={deleteRaceMutation.isPending}
+                            className="text-xs text-red-500 hover:text-red-700 disabled:opacity-60 px-2 min-h-11 flex items-center"
+                          >
+                            Delete
+                          </button>
                         )}
                       </div>
                     </div>

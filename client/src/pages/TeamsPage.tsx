@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
@@ -11,7 +11,6 @@ import { ApiError } from '../api/client.js';
 export default function TeamsPage() {
   const { divisionId } = useParams<{ divisionId: string }>();
   const { memberships } = useAuthContext();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [teamName, setTeamName] = useState('');
@@ -67,12 +66,7 @@ export default function TeamsPage() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <button
-            onClick={() => navigate(-1)}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            ← Back
-          </button>
+          <Link to={`/divisions/${divisionId ?? ''}`} className="text-sm text-gray-500 hover:text-gray-700">← Back</Link>
           <div className="mt-1">
             {divisionData && (
               <p className="text-sm text-gray-500">{divisionData.division.league.name} · {divisionData.division.name}</p>

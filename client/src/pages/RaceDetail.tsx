@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { ApiError } from '../api/client.js';
+import { getRaceInfo } from '../api/races.js';
+import type { RaceResponse } from '../api/races.js';
 import {
   getLineups,
   getOrCreateLineup,
@@ -184,7 +186,6 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
 export default function RaceDetail() {
   const { raceId } = useParams<{ raceId: string }>();
   const { memberships, user } = useAuthContext();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [subOutAthlete, setSubOutAthlete] = useState('');
@@ -193,17 +194,10 @@ export default function RaceDetail() {
   const [scratchAthleteSel, setScratchAthleteSel] = useState('');
   const [scratchError, setScratchError] = useState('');
 
-  // Fetch race metadata (status, classification, etc.) via direct API call
-  const raceMetaQuery = useQuery<{ race: { id: string; status: string; classification?: { label: string }; distance?: { label: string } } }, ApiError>({
+  // Fetch race metadata (status, classification, raceDayId, etc.)
+  const raceMetaQuery = useQuery<RaceResponse, ApiError>({
     queryKey: ['race-meta', raceId],
-    queryFn: async () => {
-      const res = await fetch(`/api/races/${raceId ?? ''}`, { credentials: 'include' });
-      if (!res.ok) {
-        const body = await res.json() as { error?: string };
-        throw new ApiError(res.status, body.error ?? 'Failed to load race');
-      }
-      return res.json() as Promise<{ race: { id: string; status: string; classification?: { label: string }; distance?: { label: string } } }>;
-    },
+    queryFn: () => getRaceInfo(raceId!),
     enabled: !!raceId,
   });
 
@@ -311,6 +305,7 @@ export default function RaceDetail() {
   const heats = heatsQuery.data?.heats ?? [];
   const raceStatus = raceMetaQuery.data?.race.status ?? null;
   const raceMeta = raceMetaQuery.data?.race ?? null;
+  const raceDayId = raceMeta?.raceDayId;
 
   // Find if current user is the primary official for this race day
   // We determine this by checking substitutions where the user reviewed them
@@ -340,12 +335,12 @@ export default function RaceDetail() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <button
-            onClick={() => navigate(-1)}
+          <Link
+            to={`/race-days/${raceDayId ?? ''}`}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
             ← Back
-          </button>
+          </Link>
           <h1 className="text-2xl font-bold text-gray-900 mt-1">Race</h1>
           {raceMeta?.classification && raceMeta?.distance && (
             <p className="text-sm text-gray-500">{raceMeta.classification.label} · {raceMeta.distance.label}</p>
