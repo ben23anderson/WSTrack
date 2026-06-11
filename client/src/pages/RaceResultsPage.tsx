@@ -152,6 +152,7 @@ export default function RaceResultsPage() {
                             <th className="px-4 py-2 w-12">Place</th>
                             <th className="px-4 py-2">Athlete</th>
                             <th className="px-4 py-2">Team</th>
+                            <th className="px-4 py-2 w-16">Boat</th>
                             <th className="px-4 py-2 text-right">Time</th>
                             <th className="px-4 py-2">Status</th>
                           </tr>
@@ -162,6 +163,7 @@ export default function RaceResultsPage() {
                               <td className="px-4 py-2.5 font-semibold text-gray-700">{e.place ?? '—'}</td>
                               <td className="px-4 py-2.5 text-gray-800 font-medium">{e.athlete.name}</td>
                               <td className="px-4 py-2.5 text-gray-600">{e.team.name}</td>
+                              <td className="px-4 py-2.5 text-gray-600 font-mono">{e.boatNumber ? `#${e.boatNumber}` : '—'}</td>
                               <td className="px-4 py-2.5 text-right font-mono text-gray-700">{formatTime(e.timeMs)}</td>
                               <td className="px-4 py-2.5"><StatusBadge status={e.status} /></td>
                             </tr>
@@ -192,6 +194,7 @@ export default function RaceResultsPage() {
                           <th className="px-4 py-2 w-12">Place</th>
                           <th className="px-4 py-2">Athlete</th>
                           <th className="px-4 py-2">Team</th>
+                          <th className="px-4 py-2 w-16">Boat</th>
                           <th className="px-4 py-2 text-right">Time</th>
                           <th className="px-4 py-2">Status</th>
                           <th className="px-4 py-2">Source</th>
@@ -203,6 +206,7 @@ export default function RaceResultsPage() {
                             <td className="px-4 py-2.5 font-semibold text-gray-700">{s.place ?? '—'}</td>
                             <td className="px-4 py-2.5 text-gray-800 font-medium">{s.athleteName}</td>
                             <td className="px-4 py-2.5 text-gray-600">{s.teamName}</td>
+                            <td className="px-4 py-2.5 text-gray-600 font-mono">{s.boatNumber ? `#${s.boatNumber}` : '—'}</td>
                             <td className="px-4 py-2.5 text-right font-mono text-gray-700">{formatTime(s.timeMs)}</td>
                             <td className="px-4 py-2.5"><StatusBadge status={s.status} /></td>
                             <td className="px-4 py-2.5">

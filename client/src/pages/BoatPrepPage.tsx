@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
-import { ApiError } from '../api/client.js';
+import { apiFetch, ApiError } from '../api/client.js';
 import { listBoats } from '../api/boats.js';
 import type { BoatData } from '../api/boats.js';
 import type { RaceData } from '../api/races.js';
@@ -405,6 +405,60 @@ function RaceAssignmentsPanel({
 
 // ─── Section 3: Boat Loans ────────────────────────────────────────────────────
 
+// Per-race outgoing loans sub-component — avoids hooks-in-map
+function RaceOutgoingLoans({
+  race,
+  teamId,
+  races,
+  isHeadCoach,
+  onDelete,
+}: {
+  race: RaceData;
+  teamId: string;
+  races: RaceData[];
+  isHeadCoach: boolean;
+  onDelete: (raceId: string, loanId: string) => void;
+}) {
+  const loansQuery = useQuery<{ loans: BoatLoanData[] }, ApiError>({
+    queryKey: ['boatLoans', race.id],
+    queryFn: () => listBoatLoans(race.id),
+  });
+  const outgoing = (loansQuery.data?.loans ?? []).filter((l) => l.fromTeamId === teamId);
+  if (outgoing.length === 0) return null;
+  return (
+    <>
+      {outgoing.map((loan) => {
+        const loanRace = races.find((r) => r.id === loan.raceId);
+        return (
+          <div key={loan.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+            <div className="text-sm">
+              <span className="font-medium text-gray-800">
+                #{loan.boat.number}{loan.boat.model ? ` (${loan.boat.model})` : ''}
+              </span>
+              <span className="text-gray-500 mx-1.5">to</span>
+              <span className="text-gray-800">{loan.toTeam.name}</span>
+              {loanRace && (
+                <span className="text-gray-500 ml-1.5">
+                  for {loanRace.classification?.label} {loanRace.distance?.label}
+                </span>
+              )}
+            </div>
+            {isHeadCoach && (
+              <button
+                type="button"
+                onClick={() => onDelete(loan.raceId, loan.id)}
+                className="text-xs text-red-500 hover:text-red-700 min-h-8 px-2"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 interface BoatLoansSectionProps {
   races: RaceData[];
   raceDayId: string;
@@ -433,28 +487,13 @@ function BoatLoansSection({
     enabled: !!raceDayId,
   });
 
-  // Fetch all loans for all races
-  const loansQueries = races.map((race) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useQuery<{ loans: BoatLoanData[] }, ApiError>({
-      queryKey: ['boatLoans', race.id],
-      queryFn: () => listBoatLoans(race.id),
-    })
-  );
-
   // Fetch teams in division for "loan to" dropdown
   const teamsQuery = useQuery<{ teams: { id: string; name: string }[] }, ApiError>({
     queryKey: ['teamsInDivision', divisionId],
-    queryFn: async () => {
-      const res = await fetch(`/api/teams?divisionId=${divisionId}`, { credentials: 'include' });
-      if (!res.ok) throw new ApiError(res.status, 'Failed to load teams');
-      return res.json() as Promise<{ teams: { id: string; name: string }[] }>;
-    },
+    queryFn: () =>
+      apiFetch<{ teams: { id: string; name: string }[] }>(`/divisions/${divisionId}/teams`),
     enabled: isHeadCoach && !!divisionId,
   });
-
-  const allLoans = loansQueries.flatMap((q) => q.data?.loans ?? []);
-  const outgoingLoans = allLoans.filter((l) => l.fromTeamId === teamId);
 
   const myBroughtBoats = (broughtQuery.data?.broughtBoats ?? []).filter(
     (rb) => rb.teamId === teamId
@@ -495,45 +534,22 @@ function BoatLoansSection({
 
   return (
     <div className="space-y-4">
-      {/* Existing outgoing loans */}
-      {outgoingLoans.length > 0 && (
+      {/* Existing outgoing loans — one sub-component per race to avoid hooks-in-map */}
+      {races.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
             Current Outgoing Loans
           </p>
-          {outgoingLoans.map((loan) => {
-            const loanRace = races.find((r) => r.id === loan.raceId);
-            return (
-              <div
-                key={loan.id}
-                className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2"
-              >
-                <div className="text-sm">
-                  <span className="font-medium text-gray-800">
-                    #{loan.boat.number}
-                    {loan.boat.model ? ` (${loan.boat.model})` : ''}
-                  </span>
-                  <span className="text-gray-500 mx-1.5">to</span>
-                  <span className="text-gray-800">{loan.toTeam.name}</span>
-                  {loanRace && (
-                    <span className="text-gray-500 ml-1.5">
-                      for {loanRace.classification?.label} {loanRace.distance?.label}
-                    </span>
-                  )}
-                </div>
-                {isHeadCoach && (
-                  <button
-                    type="button"
-                    onClick={() => deleteMutation.mutate({ raceId: loan.raceId, loanId: loan.id })}
-                    disabled={deleteMutation.isPending}
-                    className="text-xs text-red-500 hover:text-red-700 min-h-8 px-2"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          {races.map((race) => (
+            <RaceOutgoingLoans
+              key={race.id}
+              race={race}
+              teamId={teamId}
+              races={races}
+              isHeadCoach={isHeadCoach}
+              onDelete={(raceId, loanId) => deleteMutation.mutate({ raceId, loanId })}
+            />
+          ))}
         </div>
       )}
 
@@ -619,7 +635,7 @@ function BoatLoansSection({
         </div>
       )}
 
-      {outgoingLoans.length === 0 && !isHeadCoach && (
+      {!isHeadCoach && (
         <p className="text-sm text-gray-400 italic">No outgoing loans.</p>
       )}
     </div>
@@ -680,21 +696,6 @@ export default function BoatPrepPage() {
     (a, b) => a.orderIndex - b.orderIndex
   );
 
-  // Find races where this team has a submitted lineup
-  const lineupsQueries = races.map((r) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useQuery<{ lineups: LineupData[] }, ApiError>({
-      queryKey: ['lineups', r.id],
-      queryFn: () => getLineups(r.id),
-      enabled: !!r.id && !!teamId,
-    })
-  );
-
-  const racesWithLineup = races.filter((_race, i) => {
-    const lineups = lineupsQueries[i]?.data?.lineups ?? [];
-    return lineups.some((l) => l.teamId === teamId);
-  });
-
   if (!teamId) {
     return (
       <Layout>
@@ -737,11 +738,9 @@ export default function BoatPrepPage() {
             </div>
           ) : races.length === 0 ? (
             <p className="text-sm text-gray-500">No races scheduled.</p>
-          ) : racesWithLineup.length === 0 ? (
-            <p className="text-sm text-gray-500">No races with a submitted lineup.</p>
           ) : (
             <div className="space-y-5">
-              {racesWithLineup.map((race) => (
+              {races.map((race) => (
                 <RaceAssignmentsPanel
                   key={race.id}
                   race={race}
