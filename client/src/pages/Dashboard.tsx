@@ -124,6 +124,21 @@ export default function Dashboard() {
           );
         })}
 
+        {/* ── System admin ── */}
+        {memberships.some((m) => m.role === 'system_admin') && (
+          <section>
+            <Link
+              to="/admin"
+              className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 hover:bg-purple-100 transition-colors min-h-11"
+            >
+              <span className="font-medium text-purple-900">Admin Panel</span>
+              <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </section>
+        )}
+
         {/* ── Empty state ── */}
         {memberships.length === 0 && (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 space-y-4">

@@ -14,7 +14,7 @@ import {
 import type { DistanceData, ClassificationData } from '../api/divisionConfig.js';
 import { listBoatModels, createBoatModel, deleteBoatModel } from '../api/boatModels.js';
 import type { BoatModelData } from '../api/boatModels.js';
-import { listTemplates, createTemplate, deleteTemplate } from '../api/raceDayTemplates.js';
+import { listTemplates, createTemplate, deleteTemplate, addTemplateRace, deleteTemplateRace } from '../api/raceDayTemplates.js';
 import type { RaceDayTemplateData } from '../api/raceDayTemplates.js';
 import { ApiError } from '../api/client.js';
 
@@ -47,6 +47,13 @@ export default function DivisionConfig() {
   const [showAddTemplate, setShowAddTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateError, setTemplateError] = useState('');
+
+  // Template race state
+  const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
+  const [templateRaceClassId, setTemplateRaceClassId] = useState('');
+  const [templateRaceDistId, setTemplateRaceDistId] = useState('');
+  const [templateRaceLanes, setTemplateRaceLanes] = useState('8');
+  const [templateRaceHasFinals, setTemplateRaceHasFinals] = useState(true);
 
   const distancesQuery = useQuery<{ distances: DistanceData[] }, ApiError>({
     queryKey: ['distances', divisionId],
@@ -151,6 +158,24 @@ export default function DivisionConfig() {
       void queryClient.invalidateQueries({ queryKey: ['templates', divisionId] });
     },
     onError: (err: ApiError) => setTemplateError(err.message),
+  });
+
+  const addTemplateRaceMutation = useMutation({
+    mutationFn: ({ templateId, data }: { templateId: string; data: Parameters<typeof addTemplateRace>[2] }) =>
+      addTemplateRace(divisionId!, templateId, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['templates', divisionId] });
+      setTemplateRaceDistId('');
+      setTemplateRaceClassId('');
+      setTemplateRaceLanes('8');
+      setTemplateRaceHasFinals(true);
+    },
+  });
+
+  const deleteTemplateRaceMutation = useMutation({
+    mutationFn: ({ templateId, raceId }: { templateId: string; raceId: string }) =>
+      deleteTemplateRace(divisionId!, templateId, raceId),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['templates', divisionId] }); },
   });
 
   const handleAddDistance = (e: React.FormEvent) => {
@@ -418,37 +443,121 @@ export default function DivisionConfig() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">Race Day Templates</h2>
             {!showAddTemplate && (
-              <button
-                onClick={() => setShowAddTemplate(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
-              >
-                + Add Template
-              </button>
+              <button onClick={() => setShowAddTemplate(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors">+ Add Template</button>
             )}
           </div>
 
           {templatesQuery.isLoading ? (
-            <div className="flex justify-center py-6">
-              <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <div className="flex justify-center py-6"><div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {(templatesQuery.data?.templates ?? []).map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900">{t.name}</p>
-                    <p className="text-xs text-gray-500">{t.races.length} race{t.races.length !== 1 ? 's' : ''}</p>
+                <li key={t.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="font-medium text-gray-900">{t.name}</p>
+                      <p className="text-xs text-gray-500">{t.races.length} race{t.races.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setExpandedTemplateId(expandedTemplateId === t.id ? null : t.id)}
+                        className="text-xs text-blue-600 hover:text-blue-800 px-2 min-h-8"
+                      >
+                        {expandedTemplateId === t.id ? 'Close' : 'Edit races'}
+                      </button>
+                      <button onClick={() => deleteTemplateMutation.mutate(t.id)} disabled={deleteTemplateMutation.isPending} className="text-xs text-red-500 hover:text-red-700 min-h-8 px-2">
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => deleteTemplateMutation.mutate(t.id)}
-                    disabled={deleteTemplateMutation.isPending}
-                    className="text-xs text-red-500 hover:text-red-700 min-h-8 px-2"
-                  >
-                    Delete
-                  </button>
+
+                  {expandedTemplateId === t.id && (
+                    <div className="border-t border-gray-100 px-4 py-3 space-y-3 bg-gray-50">
+                      {t.races.length === 0 ? (
+                        <p className="text-xs text-gray-400">No races yet. Add one below.</p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {t.races.map((r) => (
+                            <li key={r.id} className="flex items-center justify-between text-sm bg-white border border-gray-200 rounded-lg px-3 py-2">
+                              <span className="text-gray-800">
+                                {r.classification?.label ?? 'Open'} · {r.distance?.label ?? '—'} · {r.laneCount} lanes{r.hasFinals ? ' · Finals' : ''}
+                              </span>
+                              <button
+                                onClick={() => deleteTemplateRaceMutation.mutate({ templateId: t.id, raceId: r.id })}
+                                className="text-xs text-red-500 hover:text-red-700 ml-2"
+                              >
+                                Remove
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {/* Add race form */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-600">Add Race</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={templateRaceClassId}
+                            onChange={(e) => setTemplateRaceClassId(e.target.value)}
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">Open (no classification)</option>
+                            {(classificationsQuery.data?.classifications ?? []).map((c) => (
+                              <option key={c.id} value={c.id}>{c.label}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={templateRaceDistId}
+                            onChange={(e) => setTemplateRaceDistId(e.target.value)}
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">— Distance —</option>
+                            {(distancesQuery.data?.distances ?? []).map((d) => (
+                              <option key={d.id} value={d.id}>{d.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="number"
+                            min="1" max="20"
+                            value={templateRaceLanes}
+                            onChange={(e) => setTemplateRaceLanes(e.target.value)}
+                            className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Lanes"
+                          />
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={templateRaceHasFinals}
+                              onChange={(e) => setTemplateRaceHasFinals(e.target.checked)}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Has finals
+                          </label>
+                          <button
+                            onClick={() => {
+                              if (!templateRaceDistId) return;
+                              addTemplateRaceMutation.mutate({
+                                templateId: t.id,
+                                data: {
+                                  classification_id: templateRaceClassId || undefined,
+                                  distance_id: templateRaceDistId,
+                                  lane_count: parseInt(templateRaceLanes, 10) || 8,
+                                  has_finals: templateRaceHasFinals,
+                                  order_index: t.races.length,
+                                },
+                              });
+                            }}
+                            disabled={!templateRaceDistId || addTemplateRaceMutation.isPending}
+                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-3 py-2 text-sm transition-colors"
+                          >
+                            {addTemplateRaceMutation.isPending ? 'Adding…' : 'Add'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
               {(templatesQuery.data?.templates ?? []).length === 0 && (
@@ -457,35 +566,17 @@ export default function DivisionConfig() {
             </ul>
           )}
 
-          {templateError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">
-              {templateError}
-            </div>
-          )}
+          {templateError && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">{templateError}</div>}
 
           {showAddTemplate && (
             <form onSubmit={handleAddTemplate} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
               <h3 className="text-sm font-semibold text-gray-700">Add Template</h3>
-              <input
-                type="text"
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                placeholder="Template name"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
-              />
+              <input type="text" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Template name" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11" />
               <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={createTemplateMutation.isPending}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors"
-                >
+                <button type="submit" disabled={createTemplateMutation.isPending} className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors">
                   {createTemplateMutation.isPending ? 'Creating…' : 'Create Template'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddTemplate(false); setTemplateError(''); }}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors"
-                >
+                <button type="button" onClick={() => { setShowAddTemplate(false); setTemplateError(''); }} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors">
                   Cancel
                 </button>
               </div>

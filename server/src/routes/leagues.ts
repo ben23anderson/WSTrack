@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import db from '../lib/db.js';
-import { requireAuth } from '../middleware/requireAuth.js';
+import { requireAuth, requireSystemAdmin } from '../middleware/requireAuth.js';
 import { CreateLeagueSchema } from '../lib/validation.js';
 
 const router = Router();
 
 // POST /api/leagues — create a league + initial division + coordinator membership
-router.post('/', requireAuth, async (req, res): Promise<void> => {
+router.post('/', requireAuth, requireSystemAdmin, async (req, res): Promise<void> => {
   const parsed = CreateLeagueSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid input' });

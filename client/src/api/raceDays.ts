@@ -84,3 +84,7 @@ export async function updateRaceDay(
     body: JSON.stringify(data),
   });
 }
+
+export async function deleteRaceDay(divisionId: string, raceDayId: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/divisions/${divisionId}/race-days/${raceDayId}`, { method: 'DELETE' });
+}

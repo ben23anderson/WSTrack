@@ -291,6 +291,16 @@ export function requireBoatRead(
   };
 }
 
+export function requireSystemAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.session.userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  void db.membership.findFirst({
+    where: { userId: req.session.userId, role: 'system_admin', teamId: null, divisionId: null },
+  }).then((m) => {
+    if (!m) { res.status(403).json({ error: 'System admin only' }); return; }
+    next();
+  }).catch(() => res.status(500).json({ error: 'Internal server error' }));
+}
+
 /** Requires head_coach OR assistant_coach with `boat_inventory` permission on teamIdParam. */
 export function requireBoatInventoryAccess(
   teamIdParam: string

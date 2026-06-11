@@ -31,6 +31,7 @@ import boatModelsRouter from './routes/boatModels.js';
 import raceDayTemplatesRouter from './routes/raceDayTemplates.js';
 import publicRouter from './routes/public.js';
 import leaguesRouter from './routes/leagues.js';
+import adminRouter from './routes/admin.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -74,6 +75,7 @@ export function createApp(): express.Application {
   app.use('/api/divisions/:divisionId/boat-models', boatModelsRouter);
   app.use('/api/divisions/:divisionId/race-day-templates', raceDayTemplatesRouter);
   app.use('/api/public', publicRouter);
+  app.use('/api/admin', adminRouter);
 
   // In production, serve the built React client from server/public
   if (config.NODE_ENV === 'production') {
