@@ -264,6 +264,11 @@ router.post('/seed', requireAuth, async (req, res): Promise<void> => {
                 include: {
                   athlete: { select: { id: true, name: true, grade: true } },
                   lineup: { include: { team: { select: { id: true, name: true } } } },
+                  boatAssignments: {
+                    where: { raceId },
+                    select: { boat: { select: { number: true } } },
+                    take: 1,
+                  },
                 },
               },
             },
@@ -307,6 +312,11 @@ router.get('/heats', requireAuth, async (req, res): Promise<void> => {
               include: {
                 athlete: { select: { id: true, name: true, grade: true } },
                 lineup: { include: { team: { select: { id: true, name: true } } } },
+                boatAssignments: {
+                  where: { raceId },
+                  select: { boat: { select: { number: true } } },
+                  take: 1,
+                },
               },
             },
           },

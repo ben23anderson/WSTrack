@@ -352,6 +352,7 @@ model Heat {
   raceId     String    @db.VarChar(30)
   heatNumber Int
   startTs    DateTime?
+  endTs      DateTime?
   createdAt  DateTime  @default(now())
 
   race            Race             @relation(fields: [raceId], references: [id])

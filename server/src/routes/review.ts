@@ -3,8 +3,7 @@ import type { Server as SocketIOServer } from 'socket.io';
 import db from '../lib/db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { AdjustResultSchema, ReconcileHeatSchema } from '../lib/validation.js';
-import { reconcileTapes } from '../lib/reconciliation.js';
-import type { Tape } from '../lib/reconciliation.js';
+import { reconcileTapes, buildTapesForReconciliation } from '../lib/reconciliation.js';
 
 /** @private */
 async function getHeatRaceDay(
@@ -139,16 +138,16 @@ export function createReviewRouter(io: SocketIOServer): Router {
         include: { finishEvents: { orderBy: { sequence: 'asc' } } },
       });
 
-      const reconcileTapeInput: Tape[] = tapes.map((t) => ({
-        officialId: t.officialId,
-        events: t.finishEvents
-          .filter((e) => e.entryId !== null)
-          .map((e) => ({
-            entryId: e.entryId!,
+      const reconcileTapeInput = buildTapesForReconciliation(
+        tapes.map((t) => ({
+          officialId: t.officialId,
+          events: t.finishEvents.map((e) => ({
+            entryId: e.entryId,
             timeMsFromStart: Number(e.clientFinishTs) - startTs.getTime(),
             sequence: e.sequence,
           })),
-      }));
+        }))
+      );
 
       const dnsDqResults = await db.result.findMany({
         where: { heatId, status: { in: ['dns', 'dq'] } },

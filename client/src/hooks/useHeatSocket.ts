@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 
 export interface FinishEventData {
   id: string;
-  entryId: string;
+  entryId: string | null;
   clientFinishTs: number;
   sequence: number;
 }
@@ -18,6 +18,7 @@ export interface TapeData {
 export interface HeatSocketState {
   connected: boolean;
   startTs: number | null;
+  endTs: number | null;
   tapes: TapeData[];
   dnsDqEvents: Array<{ entryId: string; status: string; officialId: string }>;
   disagreeEvents: Array<{ finishEventId: string; officialId: string }>;
@@ -28,6 +29,7 @@ export function useHeatSocket(heatId: string): HeatSocketState {
   const [state, setState] = useState<HeatSocketState>({
     connected: false,
     startTs: null,
+    endTs: null,
     tapes: [],
     dnsDqEvents: [],
     disagreeEvents: [],
@@ -46,12 +48,20 @@ export function useHeatSocket(heatId: string): HeatSocketState {
       setState((s) => ({ ...s, connected: false }));
     });
 
-    socket.on('heat:sync', ({ tapes }: { heatId: string; tapes: TapeData[] }) => {
-      setState((s) => ({ ...s, tapes }));
+    socket.on('heat:sync', ({
+      tapes,
+      startTs,
+      endTs,
+    }: { heatId: string; tapes: TapeData[]; startTs: number | null; endTs: number | null }) => {
+      setState((s) => ({ ...s, tapes, startTs: startTs ?? s.startTs, endTs: endTs ?? s.endTs }));
     });
 
     socket.on('heat:started', ({ startTs }: { heatId: string; startTs: number }) => {
       setState((s) => ({ ...s, startTs }));
+    });
+
+    socket.on('heat:ended', ({ endTs }: { heatId: string; endTs: number }) => {
+      setState((s) => ({ ...s, endTs }));
     });
 
     socket.on(
