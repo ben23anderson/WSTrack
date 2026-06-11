@@ -13,7 +13,7 @@ import {
   bulkAddLineupEntries,
   removeLineupEntry,
 } from '../api/lineups.js';
-import type { LineupData, LineupEntry } from '../api/lineups.js';
+import type { LineupData, LineupEntry, LineupsResponse } from '../api/lineups.js';
 import {
   listSubstitutions,
   requestSubstitution,
@@ -252,7 +252,7 @@ export default function RaceDetail() {
   const [scratchAthleteSel, setScratchAthleteSel] = useState('');
   const [scratchError, setScratchError] = useState('');
 
-  const lineupsQuery = useQuery<{ lineups: LineupData[] }, ApiError>({
+  const lineupsQuery = useQuery<LineupsResponse, ApiError>({
     queryKey: ['lineups', raceId],
     queryFn: () => getLineups(raceId!),
     enabled: !!raceId,

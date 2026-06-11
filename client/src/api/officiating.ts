@@ -14,9 +14,9 @@ export function getTapes(heatId: string) {
 
 export function recordFinish(
   heatId: string,
-  data: { entry_id: string; client_finish_ts: number; sequence: number }
+  data: { entry_id?: string; boat_number?: string; client_finish_ts: number; sequence: number }
 ) {
-  return apiFetch<{ event: unknown }>(`/heats/${heatId}/finish-events`, {
+  return apiFetch<{ event: { id: string; boatNumber: string | null; clientFinishTs: number; sequence: number } }>(`/heats/${heatId}/finish-events`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

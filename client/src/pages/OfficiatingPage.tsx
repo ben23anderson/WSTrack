@@ -187,7 +187,7 @@ export default function OfficiatingPage() {
         {
           onSuccess: (data) => {
             // Replace temp entry with real event id
-            const realEvent = data as { event: { id: string; entryId: string; clientFinishTs: number; sequence: number } };
+            const realEvent = data as { event: { id: string } };
             setMyFinishes((prev) =>
               prev.map((f) =>
                 f.eventId === tempId

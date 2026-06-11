@@ -42,6 +42,14 @@ function HeatCard({ heat, centerLane, raceId, isOfficial }: HeatCardProps) {
           )}
           {isOfficial && (
             <Link
+              to={`/heats/${heat.id}/qr-scan?raceId=${raceId}`}
+              className="text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-lg px-2 py-1 font-medium"
+            >
+              QR Scan
+            </Link>
+          )}
+          {isOfficial && (
+            <Link
               to={`/heats/${heat.id}/review`}
               className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg px-2 py-1 font-medium border border-amber-300"
             >

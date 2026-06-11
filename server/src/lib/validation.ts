@@ -174,7 +174,8 @@ export const SeedRaceSchema = z.object({
 export type SeedRaceInput = z.infer<typeof SeedRaceSchema>;
 
 export const RecordFinishEventSchema = z.object({
-  entry_id: z.string().min(1),
+  entry_id: z.string().min(1).optional(),
+  boat_number: z.string().min(1).optional(),
   client_finish_ts: z.number().int().positive(),  // epoch ms
   sequence: z.number().int().min(0),
 });

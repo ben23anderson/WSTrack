@@ -16,6 +16,7 @@ import DivisionConfig from './pages/DivisionConfig.js';
 import BoatPrepPage from './pages/BoatPrepPage.js';
 import HeatSheetPage from './pages/HeatSheetPage.js';
 import OfficiatingPage from './pages/OfficiatingPage.js';
+import QRScannerPage from './pages/QRScannerPage.js';
 import LiveViewPage from './pages/LiveViewPage.js';
 import ReviewPage from './pages/ReviewPage.js';
 import RaceResultsPage from './pages/RaceResultsPage.js';
@@ -137,6 +138,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ReviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/heats/:heatId/qr-scan"
+          element={
+            <ProtectedRoute>
+              <QRScannerPage />
             </ProtectedRoute>
           }
         />

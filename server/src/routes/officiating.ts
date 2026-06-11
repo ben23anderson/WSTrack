@@ -250,7 +250,8 @@ export function createOfficiatingRouter(io: SocketIOServer): Router {
       const event = await db.finishEvent.create({
         data: {
           tapeId: tape.id,
-          entryId: parsed.data.entry_id,
+          entryId: parsed.data.entry_id ?? null,
+          boatNumber: parsed.data.boat_number ?? null,
           clientFinishTs: BigInt(parsed.data.client_finish_ts),
           sequence: parsed.data.sequence,
         },
