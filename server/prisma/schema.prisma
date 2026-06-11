@@ -1,7 +1,6 @@
-// To use MySQL (cPanel), change provider to "mysql"
 // To use SQLite, change provider to "sqlite" and DATABASE_URL to "file:./dev.db"
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
