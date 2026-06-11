@@ -117,6 +117,10 @@ export const AddLineupEntrySchema = z.object({
   pair_id: z.string().optional(),
 });
 
+export const BulkAddLineupEntriesSchema = z.object({
+  athlete_ids: z.array(z.string().min(1)).min(1, 'At least one athlete is required'),
+});
+
 export const RequestSubstitutionSchema = z.object({
   out_athlete_id: z.string().min(1),
   in_athlete_id: z.string().min(1),

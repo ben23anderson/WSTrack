@@ -10,7 +10,7 @@ import {
   submitLineup,
   unsubmitLineup,
   getLineupEntries,
-  addLineupEntry,
+  bulkAddLineupEntries,
   removeLineupEntry,
 } from '../api/lineups.js';
 import type { LineupData, LineupEntry } from '../api/lineups.js';
@@ -25,35 +25,47 @@ import type { ScratchData } from '../api/scratches.js';
 import { listAthletes } from '../api/athletes.js';
 import type { AthleteData } from '../api/athletes.js';
 
+function formatTime(ms: number): string {
+  const totalSeconds = ms / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const secs = (totalSeconds % 60).toFixed(2).padStart(5, '0');
+  return `${minutes}:${secs}`;
+}
+
 interface LineupPanelProps {
   raceId: string;
   lineup: LineupData;
   isCoach: boolean;
   athletes: AthleteData[];
+  raceDistanceId: string | null;
   onRefresh: () => void;
 }
 
-function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPanelProps) {
+function LineupPanel({ raceId, lineup, isCoach, athletes, raceDistanceId, onRefresh }: LineupPanelProps) {
   const queryClient = useQueryClient();
-  const [selectedAthlete, setSelectedAthlete] = useState('');
-  const [entryError, setEntryError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [entryMessage, setEntryMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   const entriesQuery = useQuery<{ entries: LineupEntry[] }, ApiError>({
     queryKey: ['entries', raceId, lineup.teamId],
     queryFn: () => getLineupEntries(raceId, lineup.teamId),
   });
 
-  const addMutation = useMutation({
-    mutationFn: (athleteId: string) =>
-      addLineupEntry(raceId, lineup.teamId, { athlete_id: athleteId }),
-    onSuccess: () => {
+  const bulkAddMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      bulkAddLineupEntries(raceId, lineup.teamId, { athlete_ids: ids }),
+    onSuccess: ({ errors }) => {
       void queryClient.invalidateQueries({ queryKey: ['entries', raceId, lineup.teamId] });
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
-      setSelectedAthlete('');
-      setEntryError('');
+      setSelectedIds(new Set());
+      if (errors.length > 0) {
+        setEntryMessage({ text: `${errors.length} athlete(s) could not be added (already entered today).`, isError: false });
+      } else {
+        setEntryMessage(null);
+      }
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
 
   const removeMutation = useMutation({
@@ -63,7 +75,7 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
 
   const submitMutation = useMutation({
@@ -72,7 +84,7 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
 
   const unsubmitMutation = useMutation({
@@ -81,8 +93,17 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
+
+  const toggleAthlete = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const entries = entriesQuery.data?.entries ?? lineup.entries;
   const enteredAthleteIds = new Set(entries.map((e) => e.athleteId));
@@ -124,33 +145,74 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
         </ul>
       )}
 
-      {entryError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-xs">
-          {entryError}
+      {entryMessage && (
+        <div className={`rounded-lg px-3 py-2 text-xs border ${entryMessage.isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
+          {entryMessage.text}
         </div>
       )}
 
       {isCoach && !lineup.submitted && (
-        <div className="flex gap-2">
-          <select
-            value={selectedAthlete}
-            onChange={(e) => setSelectedAthlete(e.target.value)}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
-          >
-            <option value="">Add athlete…</option>
-            {availableAthletes.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              if (selectedAthlete) addMutation.mutate(selectedAthlete);
-            }}
-            disabled={!selectedAthlete || addMutation.isPending}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-3 py-2 text-sm min-h-11 transition-colors"
-          >
-            Add
-          </button>
+        <div className="space-y-2">
+          {availableAthletes.length > 0 && (
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Select athletes to add
+              {raceDistanceId && <span className="normal-case font-normal ml-1">— showing best times for this race distance</span>}
+            </p>
+          )}
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {availableAthletes.length === 0 ? (
+              <p className="text-sm text-gray-400">All athletes are in the lineup.</p>
+            ) : (
+              availableAthletes.map((a) => {
+                const bestTime = raceDistanceId
+                  ? a.bestTimes.find((bt) => bt.distanceId === raceDistanceId)
+                  : undefined;
+                const timeLabel = bestTime ? formatTime(bestTime.timeMs) : 'No time';
+                const isSelected = selectedIds.has(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => toggleAthlete(a.id)}
+                    className={`w-full text-left border rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className={`font-medium ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>
+                          {a.name}
+                        </span>
+                        {a.grade && (
+                          <span className="text-xs text-gray-400 ml-1.5">Gr.&nbsp;{a.grade}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-xs font-mono ${bestTime ? 'text-gray-600' : 'text-gray-300'}`}>
+                          {timeLabel}
+                        </span>
+                        {isSelected && (
+                          <span className="text-blue-500 font-semibold text-sm">✓</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => bulkAddMutation.mutate([...selectedIds])}
+              disabled={bulkAddMutation.isPending}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
+            >
+              {bulkAddMutation.isPending
+                ? 'Adding…'
+                : `Add ${selectedIds.size} athlete${selectedIds.size !== 1 ? 's' : ''}`}
+            </button>
+          )}
         </div>
       )}
 
@@ -282,6 +344,7 @@ export default function RaceDetail() {
   });
 
   const lineups = lineupsQuery.data?.lineups ?? [];
+  const raceDistanceId = lineupsQuery.data?.race?.distanceId ?? null;
   const substitutions = substitutionsQuery.data?.substitutions ?? [];
   const scratches = scratchesQuery.data?.scratches ?? [];
   const athletes = athletesQuery.data?.athletes ?? [];
@@ -366,6 +429,7 @@ export default function RaceDetail() {
                 lineup={lineup}
                 isCoach={false}
                 athletes={[]}
+                raceDistanceId={raceDistanceId}
                 onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
               />
             ))
@@ -377,6 +441,7 @@ export default function RaceDetail() {
               lineup={myLineup}
               isCoach={true}
               athletes={athletes}
+              raceDistanceId={raceDistanceId}
               onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
             />
           ) : null}

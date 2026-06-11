@@ -24,8 +24,14 @@ export interface LineupData {
   entries: LineupEntry[];
 }
 
+export interface RaceInfo {
+  distanceId: string;
+  distance: { id: string; label: string };
+}
+
 export interface LineupsResponse {
   lineups: LineupData[];
+  race: RaceInfo | null;
 }
 
 export interface LineupResponse {
@@ -72,6 +78,17 @@ export async function addLineupEntry(
   data: { athlete_id: string; pair_id?: string }
 ): Promise<EntryResponse> {
   return apiFetch<EntryResponse>(`/races/${raceId}/lineups/${teamId}/entries`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function bulkAddLineupEntries(
+  raceId: string,
+  teamId: string,
+  data: { athlete_ids: string[] }
+): Promise<{ entries: LineupEntry[]; errors: { athleteId: string; message: string }[] }> {
+  return apiFetch(`/races/${raceId}/lineups/${teamId}/entries/bulk`, {
     method: 'POST',
     body: JSON.stringify(data),
   });
