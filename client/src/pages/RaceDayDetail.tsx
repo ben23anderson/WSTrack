@@ -454,7 +454,7 @@ export default function RaceDayDetail() {
                           if (ls?.exists) {
                             return <span className="text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full px-2.5 py-1">Draft</span>;
                           }
-                          return <span className="text-xs font-medium bg-gray-100 text-gray-400 rounded-full px-2.5 py-1">No lineup</span>;
+                          return null;
                         })()}
                         {isActive ? (
                           <Link

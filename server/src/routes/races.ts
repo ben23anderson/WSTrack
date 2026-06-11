@@ -111,20 +111,22 @@ router.get('/lineup-status', requireAuth, async (req, res): Promise<void> => {
     if (!divisionId) { res.status(404).json({ error: 'Race day not found' }); return; }
     if (!await isDivisionMember(userId, divisionId)) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-    const coachMembership = await db.membership.findFirst({
-      where: { userId, role: 'head_coach', team: { divisionId } },
+    // Get all teams this user coaches — scope to this race day's races, not division filter
+    const coachMemberships = await db.membership.findMany({
+      where: { userId, role: 'head_coach', teamId: { not: null } },
       select: { teamId: true },
     });
 
-    if (!coachMembership) {
+    if (coachMemberships.length === 0) {
       res.json({ statuses: [] }); return;
     }
 
+    const coachTeamIds = coachMemberships.map((m) => m.teamId!);
     const races = await db.race.findMany({ where: { raceDayId }, select: { id: true } });
     const raceIds = races.map((r) => r.id);
 
     const lineups = await db.lineup.findMany({
-      where: { raceId: { in: raceIds }, teamId: coachMembership.teamId },
+      where: { raceId: { in: raceIds }, teamId: { in: coachTeamIds } },
       select: { raceId: true, submitted: true },
     });
 
