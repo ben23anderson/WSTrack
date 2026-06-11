@@ -22,6 +22,7 @@ import RaceResultsPage from './pages/RaceResultsPage.js';
 import FinalsPage from './pages/FinalsPage.js';
 import CreateLeaguePage from './pages/CreateLeaguePage.js';
 import TeamsPage from './pages/TeamsPage.js';
+import PublicRaceDayPage from './pages/PublicRaceDayPage.js';
 
 export default function App() {
   return (
@@ -174,6 +175,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/p/:raceDayId" element={<PublicRaceDayPage />} />
       </Routes>
     </AuthProvider>
   );

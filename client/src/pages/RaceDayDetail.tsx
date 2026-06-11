@@ -9,6 +9,8 @@ import { createRace, deleteRace } from '../api/races.js';
 import type { RaceData } from '../api/races.js';
 import { listDistances, listClassifications } from '../api/divisionConfig.js';
 import type { DistanceData, ClassificationData } from '../api/divisionConfig.js';
+import { listTemplates } from '../api/raceDayTemplates.js';
+import type { RaceDayTemplateData } from '../api/raceDayTemplates.js';
 import { ApiError } from '../api/client.js';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -148,6 +150,11 @@ export default function RaceDayDetail() {
   const [topOverallCount, setTopOverallCount] = useState('8');
   const [formError, setFormError] = useState('');
 
+  // Template application state
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateApplyError, setTemplateApplyError] = useState('');
+  const [templateApplying, setTemplateApplying] = useState(false);
+
   const divisionId =
     memberships.find((m) => m.role === 'coordinator')?.divisionId ??
     memberships.find((m) => m.divisionId)?.divisionId ??
@@ -193,6 +200,12 @@ export default function RaceDayDetail() {
     enabled: !!effectiveDivisionId && showAddRace,
   });
 
+  const templatesQuery = useQuery<{ templates: RaceDayTemplateData[] }, ApiError>({
+    queryKey: ['templates', effectiveDivisionId],
+    queryFn: () => listTemplates(effectiveDivisionId!),
+    enabled: !!effectiveDivisionId && isCoordinator,
+  });
+
   const createRaceMutation = useMutation({
     mutationFn: (data: Parameters<typeof createRace>[1]) => createRace(raceDayId!, data),
     onSuccess: () => {
@@ -236,6 +249,33 @@ export default function RaceDayDetail() {
       has_finals: hasFinals,
       advancement_rule: advancementRule,
     });
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!selectedTemplateId) return;
+    const template = templatesQuery.data?.templates.find((t) => t.id === selectedTemplateId);
+    if (!template) return;
+    setTemplateApplying(true);
+    setTemplateApplyError('');
+    try {
+      for (const tr of template.races) {
+        if (!tr.distance?.id) continue;
+        await createRace(raceDayId!, {
+          classification_id: tr.classification?.id || undefined,
+          distance_id: tr.distance.id,
+          lane_count: tr.laneCount,
+          order_index: tr.orderIndex,
+          has_finals: tr.hasFinals,
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ['racesDirect', raceDayId] });
+      void queryClient.invalidateQueries({ queryKey: ['raceDayWithDiv'] });
+      setSelectedTemplateId('');
+    } catch (err) {
+      setTemplateApplyError(err instanceof ApiError ? err.message : 'Failed to apply template');
+    } finally {
+      setTemplateApplying(false);
+    }
   };
 
   const isLoading = raceDayQuery.isLoading || racesDirectQuery.isLoading;
@@ -319,6 +359,37 @@ export default function RaceDayDetail() {
               </button>
             )}
           </div>
+
+          {/* Template application */}
+          {isCoordinator && (templatesQuery.data?.templates ?? []).length > 0 && races.length === 0 && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-medium text-indigo-800">Apply a template to create races:</p>
+              {templateApplyError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">
+                  {templateApplyError}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="flex-1 border border-indigo-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-11"
+                >
+                  <option value="">Select template…</option>
+                  {(templatesQuery.data?.templates ?? []).map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.races.length} races)</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => void handleApplyTemplate()}
+                  disabled={!selectedTemplateId || templateApplying}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
+                >
+                  {templateApplying ? 'Applying…' : 'Apply'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {races.length === 0 ? (
             <p className="text-gray-500 text-sm">No races scheduled.</p>
