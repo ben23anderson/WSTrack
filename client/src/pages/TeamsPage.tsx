@@ -25,6 +25,8 @@ export default function TeamsPage() {
     (m) => m.role === 'coordinator' && m.divisionId === divisionId
   );
 
+  const userTeamIds = new Set(memberships.filter((m) => m.teamId).map((m) => m.teamId));
+
   const { data: divisionData } = useQuery<{ division: DivisionData }, ApiError>({
     queryKey: ['division', divisionId],
     queryFn: () => getDivision(divisionId!),
@@ -101,17 +103,24 @@ export default function TeamsPage() {
                 }
               };
 
+              const canAccessTeam = isCoordinator || userTeamIds.has(team.id);
               return (
                 <li key={team.id} className="space-y-2">
-                  <Link
-                    to={`/teams/${team.id}`}
-                    className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
-                  >
-                    <span className="font-medium text-gray-900">{team.name}</span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </Link>
+                  {canAccessTeam ? (
+                    <Link
+                      to={`/teams/${team.id}`}
+                      className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
+                    >
+                      <span className="font-medium text-gray-900">{team.name}</span>
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 min-h-11 opacity-60 cursor-default">
+                      <span className="font-medium text-gray-900">{team.name}</span>
+                    </div>
+                  )}
 
                   {isCoordinator && (
                     <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-2">

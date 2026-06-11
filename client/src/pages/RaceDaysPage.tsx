@@ -86,9 +86,15 @@ export default function RaceDaysPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link to={`/divisions/${divisionId}`} className="text-blue-600 hover:underline text-sm">
-              ← Division
-            </Link>
+            {isCoordinator ? (
+              <Link to={`/divisions/${divisionId}`} className="text-blue-600 hover:underline text-sm">
+                ← Division
+              </Link>
+            ) : (
+              <Link to="/" className="text-blue-600 hover:underline text-sm">
+                ← Home
+              </Link>
+            )}
             <h1 className="text-2xl font-bold text-gray-900">Race Days</h1>
           </div>
           {isCoordinator && !showForm && (
