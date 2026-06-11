@@ -4,7 +4,8 @@ export interface BoatData {
   id: string;
   teamId: string;
   number: string;
-  model: string | null;
+  boatModelId: string | null;
+  boatModel: { id: string; brand: string; name: string } | null;
   isDouble: boolean;
   createdAt: string;
   deletedAt: string | null;
@@ -26,7 +27,7 @@ export async function createBoat(
   teamId: string,
   data: {
     number: string;
-    model?: string;
+    boat_model_id?: string;
     is_double?: boolean;
   }
 ): Promise<BoatResponse> {
@@ -41,7 +42,7 @@ export async function updateBoat(
   boatId: string,
   data: {
     number?: string;
-    model?: string;
+    boat_model_id?: string;
     is_double?: boolean;
   }
 ): Promise<BoatResponse> {
@@ -62,7 +63,7 @@ export async function deleteBoat(
 
 export async function bulkCreateBoats(
   teamId: string,
-  boats: { number: string; model?: string; is_double?: boolean }[]
+  boats: { number: string; boat_model_id?: string; is_double?: boolean }[]
 ): Promise<{ boats: BoatData[]; count: number }> {
   return apiFetch<{ boats: BoatData[]; count: number }>(`/teams/${teamId}/boats/bulk`, {
     method: 'POST',

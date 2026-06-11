@@ -161,8 +161,8 @@ function BroughtBoatsSection({ raceDayId, teamId, canManage }: BroughtBoatsSecti
               >
                 <div className="text-sm">
                   <span className="font-medium text-gray-900">#{boat.number}</span>
-                  {boat.model && (
-                    <span className="text-gray-500 ml-1.5">{boat.model}</span>
+                  {boat.boatModel && (
+                    <span className="text-gray-500 ml-1.5">{boat.boatModel.brand} {boat.boatModel.name}</span>
                   )}
                 </div>
                 {canManage ? (
@@ -209,7 +209,8 @@ function BroughtBoatsSection({ raceDayId, teamId, canManage }: BroughtBoatsSecti
 interface AvailableBoatOption {
   id: string;
   number: string;
-  model: string | null;
+  boatModelId: string | null;
+  boatModelLabel: string | null;
   isLoaned: boolean;
 }
 
@@ -306,13 +307,15 @@ function RaceAssignmentsPanel({
     ...broughtBoats.map((rb) => ({
       id: rb.boatId,
       number: rb.boat.number,
-      model: rb.boat.model ?? null,
+      boatModelId: rb.boat.boatModelId ?? null,
+      boatModelLabel: rb.boat.boatModel ? `${rb.boat.boatModel.brand} ${rb.boat.boatModel.name}` : null,
       isLoaned: false,
     })),
     ...loans.map((l) => ({
       id: l.boatId,
       number: l.boat.number,
-      model: l.boat.model ?? null,
+      boatModelId: l.boat.boatModelId ?? null,
+      boatModelLabel: l.boat.boatModel ? `${l.boat.boatModel.brand} ${l.boat.boatModel.name}` : null,
       isLoaned: true,
     })),
   ];
@@ -332,12 +335,12 @@ function RaceAssignmentsPanel({
 
   function boatOptionLabel(boat: AvailableBoatOption, athleteId: string): string {
     const athlete = athleteMap.get(athleteId);
-    const baseLabel = `#${boat.number}${boat.model ? ` (${boat.model})` : ''}${boat.isLoaned ? ' [Loaned]' : ''}`;
+    const baseLabel = `#${boat.number}${boat.boatModelLabel ? ` (${boat.boatModelLabel})` : ''}${boat.isLoaned ? ' [Loaned]' : ''}`;
     if (!athlete) return baseLabel;
     if (athlete.preferredBoatNumber && boat.number === athlete.preferredBoatNumber) {
       return `★ ${baseLabel}`;
     }
-    if (athlete.preferredBoatModel && boat.model === athlete.preferredBoatModel) {
+    if (athlete.preferredBoatModelId && boat.boatModelId === athlete.preferredBoatModelId) {
       return `* ${baseLabel}`;
     }
     return baseLabel;
@@ -411,7 +414,7 @@ function RaceAssignmentsPanel({
                 ) : (
                   <span className="text-sm text-gray-500 flex-shrink-0">
                     {assignment
-                      ? `#${assignment.boat.number}${assignment.boat.model ? ` (${assignment.boat.model})` : ''}`
+                      ? `#${assignment.boat.number}`
                       : 'Unassigned'}
                   </span>
                 )}
@@ -477,7 +480,7 @@ function RaceOutgoingLoans({
           <div key={loan.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
             <div className="text-sm">
               <span className="font-medium text-gray-800">
-                #{loan.boat.number}{loan.boat.model ? ` (${loan.boat.model})` : ''}
+                #{loan.boat.number}{loan.boat.boatModel ? ` (${loan.boat.boatModel.brand} ${loan.boat.boatModel.name})` : ''}
               </span>
               <span className="text-gray-500 mx-1.5">to</span>
               <span className="text-gray-800">{loan.toTeam.name}</span>
@@ -613,7 +616,7 @@ function BoatLoansSection({
                 {myBroughtBoats.map((rb) => (
                   <option key={rb.boatId} value={rb.boatId}>
                     #{rb.boat.number}
-                    {rb.boat.model ? ` (${rb.boat.model})` : ''}
+                    {rb.boat.boatModel ? ` (${rb.boat.boatModel.brand} ${rb.boat.boatModel.name})` : ''}
                   </option>
                 ))}
               </select>

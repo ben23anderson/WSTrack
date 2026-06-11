@@ -18,6 +18,8 @@ import { getTeam } from '../api/teams.js';
 import type { TeamData } from '../api/teams.js';
 import { getDivisionClassifications } from '../api/divisions.js';
 import type { ClassificationSummary } from '../api/divisions.js';
+import { listBoatModels } from '../api/boatModels.js';
+import type { BoatModelData } from '../api/boatModels.js';
 import { ApiError } from '../api/client.js';
 
 /** Parse "M:SS.ss" or "MM:SS.ss" to milliseconds. Returns null if invalid. */
@@ -222,14 +224,15 @@ interface AthleteFormProps {
   initialName?: string;
   initialGrade?: string;
   initialClassificationId?: string;
-  initialPreferredModel?: string;
+  initialPreferredModelId?: string;
   initialPreferredNumber?: string;
   classifications: ClassificationSummary[];
+  boatModels: BoatModelData[];
   onSubmit: (data: {
     name: string;
     grade: string;
     classificationId: string;
-    preferred_boat_model: string;
+    preferred_boat_model_id: string;
     preferred_boat_number: string;
   }) => void;
   onCancel: () => void;
@@ -240,9 +243,10 @@ function AthleteForm({
   initialName = '',
   initialGrade = '',
   initialClassificationId = '',
-  initialPreferredModel = '',
+  initialPreferredModelId = '',
   initialPreferredNumber = '',
   classifications,
+  boatModels,
   onSubmit,
   onCancel,
   isPending,
@@ -250,7 +254,7 @@ function AthleteForm({
   const [name, setName] = useState(initialName);
   const [grade, setGrade] = useState(initialGrade);
   const [classificationId, setClassificationId] = useState(initialClassificationId);
-  const [preferredModel, setPreferredModel] = useState(initialPreferredModel);
+  const [preferredModelId, setPreferredModelId] = useState(initialPreferredModelId);
   const [preferredNumber, setPreferredNumber] = useState(initialPreferredNumber);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -259,7 +263,7 @@ function AthleteForm({
       name: name.trim(),
       grade: grade.trim(),
       classificationId,
-      preferred_boat_model: preferredModel.trim(),
+      preferred_boat_model_id: preferredModelId,
       preferred_boat_number: preferredNumber.trim(),
     });
   };
@@ -309,13 +313,16 @@ function AthleteForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Preferred Boat Model</label>
-          <input
-            type="text"
-            value={preferredModel}
-            onChange={(e) => setPreferredModel(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
-            placeholder="e.g. Stellar"
-          />
+          <select
+            value={preferredModelId}
+            onChange={(e) => setPreferredModelId(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 bg-white"
+          >
+            <option value="">— None —</option>
+            {boatModels.map((m) => (
+              <option key={m.id} value={m.id}>{m.brand} {m.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Preferred Boat #</label>
@@ -353,10 +360,11 @@ interface AthleteCardProps {
   teamId: string;
   canManageRoster: boolean;
   classifications: ClassificationSummary[];
+  boatModels: BoatModelData[];
   onDelete: (id: string) => void;
 }
 
-function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDelete }: AthleteCardProps) {
+function AthleteCard({ athlete, teamId, canManageRoster, classifications, boatModels, onDelete }: AthleteCardProps) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -367,7 +375,7 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDele
       name?: string;
       grade?: string;
       classificationId?: string;
-      preferred_boat_model?: string | null;
+      preferred_boat_model_id?: string | null;
       preferred_boat_number?: string | null;
     }) => updateAthlete(teamId, athlete.id, data),
     onSuccess: () => {
@@ -429,15 +437,16 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDele
               initialName={athlete.name}
               initialGrade={athlete.grade ?? ''}
               initialClassificationId={athlete.classificationId ?? ''}
-              initialPreferredModel={athlete.preferredBoatModel ?? ''}
+              initialPreferredModelId={athlete.preferredBoatModelId ?? ''}
               initialPreferredNumber={athlete.preferredBoatNumber ?? ''}
               classifications={classifications}
+              boatModels={boatModels}
               onSubmit={(data) =>
                 updateMutation.mutate({
                   name: data.name,
                   grade: data.grade || undefined,
                   classificationId: data.classificationId || undefined,
-                  preferred_boat_model: data.preferred_boat_model || null,
+                  preferred_boat_model_id: data.preferred_boat_model_id || null,
                   preferred_boat_number: data.preferred_boat_number || null,
                 })
               }
@@ -461,7 +470,7 @@ function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDele
                     Pref:{' '}
                     {athlete.preferredBoatNumber && <span className="font-medium text-gray-600">#{athlete.preferredBoatNumber}</span>}
                     {athlete.preferredBoatNumber && athlete.preferredBoatModel && ' · '}
-                    {athlete.preferredBoatModel && <span className="text-gray-500">{athlete.preferredBoatModel}</span>}
+                    {athlete.preferredBoatModel && <span className="text-gray-500">{athlete.preferredBoatModel.brand} {athlete.preferredBoatModel.name}</span>}
                   </p>
                 )}
               </div>
@@ -522,7 +531,7 @@ function BulkImportPanel({ teamId, classifications, onDone }: BulkImportPanelPro
       name: string;
       grade?: string;
       classificationId?: string;
-      preferred_boat_model?: string;
+      preferred_boat_model_id?: string;
       preferred_boat_number?: string;
     }[]) => bulkCreateAthletes(teamId, athletes),
     onSuccess: (data) => {
@@ -591,7 +600,6 @@ function BulkImportPanel({ teamId, classifications, onDone }: BulkImportPanelPro
       name: row.name,
       grade: row.grade || undefined,
       classificationId: classificationByLabel.get(row.classificationLabel.toLowerCase()) || undefined,
-      preferred_boat_model: row.preferred_boat_model || undefined,
       preferred_boat_number: row.preferred_boat_number || undefined,
     }));
     bulkMutation.mutate(athletes);
@@ -712,6 +720,14 @@ export default function RosterPage() {
 
   const classifications = classificationsData?.classifications ?? [];
 
+  const { data: modelsData } = useQuery<{ models: BoatModelData[] }, ApiError>({
+    queryKey: ['boatModels', divisionId],
+    queryFn: () => listBoatModels(divisionId!),
+    enabled: !!divisionId,
+  });
+
+  const boatModels = modelsData?.models ?? [];
+
   const { data, isLoading } = useQuery<{ athletes: AthleteData[] }, ApiError>({
     queryKey: ['athletes', teamId],
     queryFn: () => listAthletes(teamId!),
@@ -723,7 +739,7 @@ export default function RosterPage() {
       name: string;
       grade?: string;
       classificationId?: string;
-      preferred_boat_model?: string;
+      preferred_boat_model_id?: string;
       preferred_boat_number?: string;
     }) => createAthlete(teamId!, input),
     onSuccess: () => {
@@ -798,12 +814,13 @@ export default function RosterPage() {
             <h2 className="text-base font-semibold text-gray-700 mb-3">New Athlete</h2>
             <AthleteForm
               classifications={classifications}
+              boatModels={boatModels}
               onSubmit={(data) =>
                 createMutation.mutate({
                   name: data.name,
                   grade: data.grade || undefined,
                   classificationId: data.classificationId || undefined,
-                  preferred_boat_model: data.preferred_boat_model || undefined,
+                  preferred_boat_model_id: data.preferred_boat_model_id || undefined,
                   preferred_boat_number: data.preferred_boat_number || undefined,
                 })
               }
@@ -833,6 +850,7 @@ export default function RosterPage() {
                 teamId={teamId!}
                 canManageRoster={canManageRoster}
                 classifications={classifications}
+                boatModels={boatModels}
                 onDelete={(id) => deleteMutation.mutate(id)}
               />
             ))}

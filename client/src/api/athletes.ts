@@ -24,7 +24,8 @@ export interface AthleteData {
   photoUrl: string | null;
   classificationId: string | null;
   classification: { id: string; label: string } | null;
-  preferredBoatModel: string | null;
+  preferredBoatModelId: string | null;
+  preferredBoatModel: { id: string; brand: string; name: string } | null;
   preferredBoatNumber: string | null;
   createdAt: string;
   deletedAt: string | null;
@@ -53,7 +54,7 @@ export async function createAthlete(
     name: string;
     grade?: string;
     classificationId?: string;
-    preferred_boat_model?: string;
+    preferred_boat_model_id?: string;
     preferred_boat_number?: string;
   }
 ): Promise<AthleteResponse> {
@@ -70,7 +71,7 @@ export async function updateAthlete(
     name?: string;
     grade?: string;
     classificationId?: string;
-    preferred_boat_model?: string | null;
+    preferred_boat_model_id?: string | null;
     preferred_boat_number?: string | null;
   }
 ): Promise<AthleteResponse> {
@@ -146,7 +147,7 @@ export async function bulkCreateAthletes(
     name: string;
     grade?: string;
     classificationId?: string;
-    preferred_boat_model?: string;
+    preferred_boat_model_id?: string;
     preferred_boat_number?: string;
   }[]
 ): Promise<{ athletes: AthleteData[]; count: number }> {

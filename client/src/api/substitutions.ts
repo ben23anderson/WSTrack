@@ -8,6 +8,8 @@ export interface SubstitutionData {
   inAthleteId: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
+  proposedBoatId?: string | null;
+  proposedBoat?: { id: string; number: string } | null;
   team: { id: string; name: string };
   outAthlete: { id: string; name: string };
   inAthlete: { id: string; name: string };
@@ -43,5 +45,16 @@ export async function reviewSubstitution(
   return apiFetch<SubstitutionResponse>(`/races/${raceId}/substitutions/${substitutionId}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  });
+}
+
+export async function updateSubstitutionBoat(
+  raceId: string,
+  substitutionId: string,
+  proposedBoatId: string | null
+): Promise<SubstitutionResponse> {
+  return apiFetch<SubstitutionResponse>(`/races/${raceId}/substitutions/${substitutionId}/boat`, {
+    method: 'PATCH',
+    body: JSON.stringify({ proposed_boat_id: proposedBoatId }),
   });
 }

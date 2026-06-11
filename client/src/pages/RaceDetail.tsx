@@ -35,10 +35,11 @@ interface LineupPanelProps {
   isCoach: boolean;
   athletes: AthleteData[];
   raceClassificationId: string | null;
+  raceStatus: string | null;
   onRefresh: () => void;
 }
 
-function LineupPanel({ raceId, lineup, isCoach, athletes, raceClassificationId, onRefresh }: LineupPanelProps) {
+function LineupPanel({ raceId, lineup, isCoach, athletes, raceClassificationId, raceStatus, onRefresh }: LineupPanelProps) {
   const queryClient = useQueryClient();
   const [selectedAthlete, setSelectedAthlete] = useState('');
   const [entryError, setEntryError] = useState('');
@@ -166,13 +167,15 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, raceClassificationId, 
       {isCoach && (
         <div>
           {lineup.submitted ? (
-            <button
-              onClick={() => unsubmitMutation.mutate()}
-              disabled={unsubmitMutation.isPending}
-              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors"
-            >
-              {unsubmitMutation.isPending ? 'Unsubmitting…' : 'Un-submit Lineup'}
-            </button>
+            !['live', 'review', 'published'].includes(raceStatus ?? '') && (
+              <button
+                onClick={() => unsubmitMutation.mutate()}
+                disabled={unsubmitMutation.isPending}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors"
+              >
+                {unsubmitMutation.isPending ? 'Unsubmitting…' : 'Un-submit Lineup'}
+              </button>
+            )
           ) : (
             <button
               onClick={() => submitMutation.mutate()}
@@ -396,18 +399,22 @@ export default function RaceDetail() {
           >
             View Heat Sheet
           </Link>
-          <Link
-            to={`/races/${raceId}/results`}
-            className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
-          >
-            Results
-          </Link>
-          <Link
-            to={`/races/${raceId}/finals`}
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
-          >
-            Finals
-          </Link>
+          {(raceStatus === 'review' || raceStatus === 'published') && (
+            <Link
+              to={`/races/${raceId}/results`}
+              className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+            >
+              Results
+            </Link>
+          )}
+          {(raceStatus === 'review' || raceStatus === 'published') && raceMeta?.hasFinals && (
+            <Link
+              to={`/races/${raceId}/finals`}
+              className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+            >
+              Finals
+            </Link>
+          )}
         </div>
 
         {/* Head coach: get/create lineup button */}
@@ -437,6 +444,7 @@ export default function RaceDetail() {
                 isCoach={false}
                 athletes={[]}
                 raceClassificationId={raceMeta?.classificationId ?? null}
+                raceStatus={raceStatus}
                 onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
               />
             ))
@@ -449,13 +457,14 @@ export default function RaceDetail() {
               isCoach={true}
               athletes={athletes}
               raceClassificationId={raceMeta?.classificationId ?? null}
+              raceStatus={raceStatus}
               onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
             />
           ) : null}
         </section>
 
         {/* Substitution request form (head coach) */}
-        {isHeadCoach && myLineup && myLineupEntries.length > 0 && (
+        {isHeadCoach && myLineup && myLineupEntries.length > 0 && !['live', 'review', 'published'].includes(raceStatus ?? '') && (
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-gray-800">Request Substitution</h2>
             <form onSubmit={handleSubRequest} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
@@ -558,7 +567,7 @@ export default function RaceDetail() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-gray-800">Scratches</h2>
 
-          {isHeadCoach && scratchableAthletes.length > 0 && (
+          {isHeadCoach && scratchableAthletes.length > 0 && !['live', 'review', 'published'].includes(raceStatus ?? '') && (
             <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
               {scratchError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">

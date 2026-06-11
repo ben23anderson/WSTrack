@@ -9,7 +9,7 @@ export interface BoatAssignmentData {
   boatId: string;
   isFinalAssignment: boolean;
   conflictLevel: ConflictLevel;
-  boat: { id: string; number: string; model: string | null };
+  boat: { id: string; number: string; boatModelId: string | null; boatModel: { id: string; brand: string; name: string } | null };
   entry: {
     id: string;
     lineupId: string;
@@ -19,7 +19,8 @@ export interface BoatAssignmentData {
     athlete: {
       id: string;
       name: string;
-      preferredBoatModel: string | null;
+      preferredBoatModelId: string | null;
+      preferredBoatModel: { id: string; brand: string; name: string } | null;
       preferredBoatNumber: string | null;
     };
   };
