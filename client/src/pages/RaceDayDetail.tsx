@@ -227,7 +227,9 @@ export default function RaceDayDetail() {
                       <p className="font-medium text-gray-900">
                         {race.classification?.label ?? '—'} · {race.distance?.label ?? '—'}
                       </p>
-                      <p className="text-xs text-gray-500">{race.laneCount} lanes</p>
+                      <p className="text-xs text-gray-500">
+                        {race.laneCount} lanes{race.heatCount ? ` · ${race.heatCount} heat${race.heatCount === 1 ? '' : 's'}` : ''}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge status={race.status} />

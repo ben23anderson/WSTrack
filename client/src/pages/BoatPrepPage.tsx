@@ -287,7 +287,7 @@ function RaceAssignmentsPanel({
     return map;
   }, [heatsQuery.data]);
 
-  const heatsSeeded = entryHeatInfo.size > 0;
+  const heatsSeeded = (heatsQuery.data?.heats?.length ?? 0) > 0;
 
   const lineup = lineupsQuery.data?.lineups.find((l) => l.teamId === teamId);
   if (!lineup) {

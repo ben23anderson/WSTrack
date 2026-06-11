@@ -52,10 +52,13 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
       include: {
         classification: { select: { id: true, label: true, isDoubles: true } },
         distance: { select: { id: true, label: true } },
+        _count: { select: { heats: true } },
       },
       orderBy: { orderIndex: 'asc' },
     });
-    res.json({ races });
+    res.json({
+      races: races.map((r) => ({ ...r, heatCount: r._count.heats, _count: undefined })),
+    });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }

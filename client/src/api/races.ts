@@ -13,6 +13,7 @@ export interface RaceData {
   finalBRule: Record<string, unknown> | null;
   status: string;
   createdAt: string;
+  heatCount?: number;
   classification: { id: string; label: string; isDoubles: boolean };
   distance: { id: string; label: string };
 }
