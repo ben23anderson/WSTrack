@@ -506,7 +506,7 @@ export default function RaceDetail() {
                 lineup={lineup}
                 isCoach={false}
                 athletes={[]}
-                raceClassificationId={raceMeta?.classificationId ?? null}
+                raceClassificationId={raceMeta?.classification?.label?.toLowerCase() === 'open' ? null : (raceMeta?.classificationId ?? null)}
                 raceDistanceId={raceDistanceId}
                 raceStatus={raceStatus}
                 onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
