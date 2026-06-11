@@ -5,7 +5,7 @@ import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { getRaceDay } from '../api/raceDays.js';
 import type { RaceDayData } from '../api/raceDays.js';
-import { createRace, deleteRace } from '../api/races.js';
+import { createRace, deleteRace, updateRace } from '../api/races.js';
 import type { RaceData } from '../api/races.js';
 import { listDistances, listClassifications } from '../api/divisionConfig.js';
 import type { DistanceData, ClassificationData } from '../api/divisionConfig.js';
@@ -234,6 +234,18 @@ export default function RaceDayDetail() {
     },
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: async ({ raceId, swapId, raceOrder, swapOrder }: { raceId: string; swapId: string; raceOrder: number; swapOrder: number }) => {
+      await Promise.all([
+        updateRace(raceDayId!, raceId, { order_index: swapOrder }),
+        updateRace(raceDayId!, swapId, { order_index: raceOrder }),
+      ]);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['racesDirect', raceDayId] });
+    },
+  });
+
   const handleAddRace = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
@@ -446,6 +458,35 @@ export default function RaceDayDetail() {
                             </svg>
                           </Link>
                         )}
+                        {isCoordinator && (() => {
+                          const idx = races.indexOf(race);
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                onClick={() => {
+                                  const prev = races[idx - 1];
+                                  if (prev) reorderMutation.mutate({ raceId: race.id, swapId: prev.id, raceOrder: race.orderIndex, swapOrder: prev.orderIndex });
+                                }}
+                                disabled={idx === 0 || reorderMutation.isPending}
+                                className="text-gray-400 hover:text-gray-700 disabled:opacity-20 leading-none px-1"
+                                title="Move up"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const next = races[idx + 1];
+                                  if (next) reorderMutation.mutate({ raceId: race.id, swapId: next.id, raceOrder: race.orderIndex, swapOrder: next.orderIndex });
+                                }}
+                                disabled={idx === races.length - 1 || reorderMutation.isPending}
+                                className="text-gray-400 hover:text-gray-700 disabled:opacity-20 leading-none px-1"
+                                title="Move down"
+                              >
+                                ▼
+                              </button>
+                            </div>
+                          );
+                        })()}
                         {isCoordinator && (
                           <button
                             onClick={() => {
