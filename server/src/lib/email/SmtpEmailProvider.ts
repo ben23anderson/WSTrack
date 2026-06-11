@@ -28,6 +28,7 @@ export class SmtpEmailProvider implements EmailProvider {
       port: options.port,
       secure: options.port === 465,
       auth: options.user ? { user: options.user, pass: options.pass } : undefined,
+      tls: { rejectUnauthorized: false },
     });
 
     // Verify connection on startup (non-blocking)
