@@ -173,4 +173,42 @@ router.get('/:divisionId/teams', requireAuth, async (req, res): Promise<void> =>
   }
 });
 
+// GET /api/divisions/:divisionId/officials — list users with role='official' in the division
+router.get('/:divisionId/officials', requireAuth, async (req, res): Promise<void> => {
+  const { divisionId } = req.params;
+
+  try {
+    // Must be a member of this division (directly or via team)
+    const membership = await db.membership.findFirst({
+      where: {
+        userId: req.session.userId!,
+        OR: [
+          { divisionId },
+          { team: { divisionId } },
+        ],
+      },
+    });
+
+    if (!membership) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const officialMemberships = await db.membership.findMany({
+      where: { divisionId, role: 'official' },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    const officials = officialMemberships.map((m) => ({
+      id: m.user.id,
+      name: m.user.name,
+      email: m.user.email,
+    }));
+
+    res.json({ officials });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

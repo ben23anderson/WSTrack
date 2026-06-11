@@ -3,7 +3,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import db from '../lib/db.js';
 import type { StorageProvider } from '../lib/storage/StorageProvider.js';
-import { requireAuth, requireRosterAccess } from '../middleware/requireAuth.js';
+import { requireAuth, requireRosterAccess, requireRosterRead } from '../middleware/requireAuth.js';
 import {
   CreateAthleteSchema,
   UpdateAthleteSchema,
@@ -46,7 +46,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
   });
 
   // GET /api/teams/:teamId/athletes
-  router.get('/', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/', requireRosterRead('teamId'), async (req, res): Promise<void> => {
     const { teamId } = req.params;
     try {
       const athletes = await db.athlete.findMany({
@@ -92,7 +92,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
   });
 
   // GET /api/teams/:teamId/athletes/:athleteId
-  router.get('/:athleteId', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/:athleteId', requireRosterRead('teamId'), async (req, res): Promise<void> => {
     const { teamId, athleteId } = req.params;
     try {
       const athlete = await db.athlete.findFirst({

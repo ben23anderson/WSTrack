@@ -5,6 +5,8 @@ import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { listRaceDays, createRaceDay } from '../api/raceDays.js';
 import type { RaceDayData } from '../api/raceDays.js';
+import { getDivisionOfficials } from '../api/divisions.js';
+import type { OfficialSummary } from '../api/divisions.js';
 import { ApiError } from '../api/client.js';
 
 function formatDate(dateStr: string): string {
@@ -25,8 +27,16 @@ export default function RaceDaysPage() {
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
   const [primaryOfficialId, setPrimaryOfficialId] = useState('');
-  const [officialIds, setOfficialIds] = useState('');
+  const [selectedOfficialIds, setSelectedOfficialIds] = useState<string[]>([]);
   const [formError, setFormError] = useState('');
+
+  const { data: officialsData } = useQuery<{ officials: OfficialSummary[] }, ApiError>({
+    queryKey: ['divisionOfficials', divisionId],
+    queryFn: () => getDivisionOfficials(divisionId!),
+    enabled: !!divisionId && isCoordinator,
+  });
+
+  const availableOfficials = officialsData?.officials ?? [];
 
   const { data, isLoading, error } = useQuery<{ raceDays: RaceDayData[] }, ApiError>({
     queryKey: ['raceDays', divisionId],
@@ -47,25 +57,27 @@ export default function RaceDaysPage() {
       setName('');
       setDate('');
       setPrimaryOfficialId('');
-      setOfficialIds('');
+      setSelectedOfficialIds([]);
       setFormError('');
     },
     onError: (err: ApiError) => setFormError(err.message),
   });
 
+  const handleOfficialCheckbox = (officialId: string, checked: boolean) => {
+    setSelectedOfficialIds((prev) =>
+      checked ? [...prev, officialId] : prev.filter((id) => id !== officialId)
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     if (!name.trim() || !date) { setFormError('Name and date are required'); return; }
-    const ids = officialIds
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
     createMutation.mutate({
       name: name.trim(),
       date,
-      primary_official_id: primaryOfficialId.trim() || undefined,
-      official_ids: ids,
+      primary_official_id: primaryOfficialId || undefined,
+      official_ids: selectedOfficialIds,
     });
   };
 
@@ -123,27 +135,48 @@ export default function RaceDaysPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Primary Official User ID (optional)
+                Primary Official (optional)
               </label>
-              <input
-                type="text"
+              <select
                 value={primaryOfficialId}
                 onChange={(e) => setPrimaryOfficialId(e.target.value)}
-                placeholder="User ID"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
-              />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 bg-white"
+              >
+                <option value="">— None —</option>
+                {availableOfficials.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name} ({o.email})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Official User IDs (comma-separated, optional)
+                Additional Officials (optional)
               </label>
-              <input
-                type="text"
-                value={officialIds}
-                onChange={(e) => setOfficialIds(e.target.value)}
-                placeholder="id1, id2, id3"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
-              />
+              {availableOfficials.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">No officials found in this division.</p>
+              ) : (
+                <div className="border border-gray-300 rounded-lg divide-y divide-gray-100">
+                  {availableOfficials.map((o) => (
+                    <label
+                      key={o.id}
+                      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50 min-h-11"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedOfficialIds.includes(o.id)}
+                        onChange={(e) => handleOfficialCheckbox(o.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-800">
+                        {o.name}
+                        <span className="ml-1 text-gray-400 text-xs">({o.email})</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <button

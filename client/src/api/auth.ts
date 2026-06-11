@@ -13,7 +13,7 @@ export interface MembershipData {
   teamId: string | null;
   divisionId: string | null;
   permissions: Record<string, boolean> | null;
-  team: { id: string; name: string } | null;
+  team: { id: string; name: string; divisionId: string } | null;
   division: { id: string; name: string } | null;
 }
 

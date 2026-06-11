@@ -39,17 +39,32 @@ export default function Dashboard() {
           <section>
             <h2 className="text-base font-semibold text-gray-700 mb-3">Teams</h2>
             <ul className="space-y-2">
-              {teamMemberships.map((m) => (
-                <li key={m.id}>
-                  <Link
-                    to={`/teams/${m.teamId!}`}
-                    className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
-                  >
-                    <span className="font-medium text-gray-900">{m.team?.name ?? m.teamId}</span>
-                    <span className="text-xs text-gray-400 capitalize">{m.role.replace('_', ' ')}</span>
-                  </Link>
-                </li>
-              ))}
+              {teamMemberships.map((m) => {
+                const coachDivisionId = m.team?.divisionId ?? null;
+                const isCoach = m.role === 'head_coach' || m.role === 'assistant_coach';
+                return (
+                  <li key={m.id} className="space-y-1">
+                    <Link
+                      to={`/teams/${m.teamId!}`}
+                      className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
+                    >
+                      <span className="font-medium text-gray-900">{m.team?.name ?? m.teamId}</span>
+                      <span className="text-xs text-gray-400 capitalize">{m.role.replace('_', ' ')}</span>
+                    </Link>
+                    {isCoach && coachDivisionId && (
+                      <Link
+                        to={`/divisions/${coachDivisionId}/race-days`}
+                        className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-2.5 hover:bg-gray-50 transition-colors min-h-11 ml-4"
+                      >
+                        <span className="text-sm text-gray-700">Race Days</span>
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}

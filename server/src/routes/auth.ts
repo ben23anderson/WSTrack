@@ -116,7 +116,7 @@ router.get('/me', requireAuth, async (req, res): Promise<void> => {
     const memberships = await db.membership.findMany({
       where: { userId: user.id },
       include: {
-        team: { select: { id: true, name: true } },
+        team: { select: { id: true, name: true, divisionId: true } },
         division: { select: { id: true, name: true } },
       },
     });

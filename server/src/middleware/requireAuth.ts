@@ -210,6 +210,48 @@ export function requireBoatAssignmentsAccess(
   };
 }
 
+/** Requires head_coach, assistant_coach with roster perm, coordinator, or official of the team's division. */
+export function requireRosterRead(
+  teamIdParam: string
+): (req: Request, res: Response, next: NextFunction) => void {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.session.userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const teamId = req.params[teamIdParam];
+    try {
+      const team = await db.team.findUnique({
+        where: { id: teamId },
+        select: { divisionId: true },
+      });
+      if (!team) {
+        res.status(404).json({ error: 'Team not found' });
+        return;
+      }
+      const membership = await db.membership.findFirst({
+        where: {
+          userId: req.session.userId,
+          OR: [
+            { teamId, role: 'head_coach' },
+            { teamId, role: 'assistant_coach', permissions: { path: ['roster'], equals: true } },
+            { divisionId: team.divisionId, role: 'coordinator' },
+            { divisionId: team.divisionId, role: 'official' },
+          ],
+        },
+      });
+      if (!membership) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+      req.membership = membership;
+      next();
+    } catch {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}
+
 /** Requires head_coach OR assistant_coach with `boat_inventory` permission on teamIdParam. */
 export function requireBoatInventoryAccess(
   teamIdParam: string
