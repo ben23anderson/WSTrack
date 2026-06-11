@@ -30,10 +30,36 @@ export async function signup(data: {
   name: string;
   email: string;
   password: string;
-}): Promise<AuthResponse> {
-  return apiFetch<AuthResponse>('/auth/signup', {
+  invite_token?: string;
+}): Promise<AuthResponse & { requiresVerification?: boolean; teamId?: string | null }> {
+  return apiFetch<AuthResponse & { requiresVerification?: boolean; teamId?: string | null }>('/auth/signup', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function verifyEmail(token: string): Promise<{ ok: boolean; user: UserData }> {
+  return apiFetch<{ ok: boolean; user: UserData }>(`/auth/verify-email/${token}`);
+}
+
+export async function resendVerification(email: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function forgotPassword(email: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
   });
 }
 

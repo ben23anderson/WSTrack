@@ -16,6 +16,7 @@ export class SmtpEmailProvider implements EmailProvider {
     this.transporter = nodemailer.createTransport({
       host: options.host,
       port: options.port,
+      secure: options.port === 465,
       auth: options.user ? { user: options.user, pass: options.pass } : undefined,
     });
   }

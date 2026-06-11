@@ -4,6 +4,37 @@ import { requireAuth } from '../middleware/requireAuth.js';
 
 const router = Router();
 
+// GET /api/invites/:token — public, returns invite metadata
+router.get('/:token', async (req, res): Promise<void> => {
+  const { token } = req.params;
+  try {
+    const invite = await db.invite.findUnique({
+      where: { token },
+      include: {
+        team: { select: { name: true } },
+        division: { select: { name: true } },
+      },
+    });
+    if (!invite) { res.status(404).json({ error: 'Invite not found' }); return; }
+
+    const emailHasAccount = !!(await db.user.findUnique({ where: { email: invite.email } }));
+
+    res.json({
+      invite: {
+        email: invite.email,
+        role: invite.role,
+        teamName: invite.team?.name ?? null,
+        divisionName: invite.division?.name ?? null,
+        isExpired: invite.expiresAt < new Date(),
+        isAccepted: !!invite.acceptedAt,
+        emailHasAccount,
+      },
+    });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /api/invites/:token/accept — any authenticated user
 router.post('/:token/accept', requireAuth, async (req, res): Promise<void> => {
   const { token } = req.params;

@@ -43,19 +43,33 @@ model Division {
 // ─── Auth / users ──────────────────────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(cuid()) @db.VarChar(30)
-  email        String    @unique @db.VarChar(191)
-  passwordHash String
-  name         String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id                String    @id @default(cuid()) @db.VarChar(30)
+  email             String    @unique @db.VarChar(191)
+  passwordHash      String
+  name              String
+  emailVerified     Boolean   @default(false)
+  verificationToken String?   @unique @db.VarChar(100)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
 
-  leagues          UserLeague[]
-  memberships      Membership[]
-  officialTapes    OfficialTape[]
-  primaryRaceDays  RaceDay[]         @relation("PrimaryOfficial")
-  raceDayOfficials RaceDayOfficial[]
+  leagues             UserLeague[]
+  memberships         Membership[]
+  officialTapes       OfficialTape[]
+  primaryRaceDays     RaceDay[]           @relation("PrimaryOfficial")
+  raceDayOfficials    RaceDayOfficial[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  userId    String    @db.VarChar(30)
+  token     String    @unique @db.VarChar(100)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model UserLeague {

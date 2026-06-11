@@ -24,6 +24,9 @@ import CreateLeaguePage from './pages/CreateLeaguePage.js';
 import TeamsPage from './pages/TeamsPage.js';
 import PublicRaceDayPage from './pages/PublicRaceDayPage.js';
 import AdminPage from './pages/AdminPage.js';
+import VerifyEmail from './pages/VerifyEmail.js';
+import ForgotPassword from './pages/ForgotPassword.js';
+import ResetPassword from './pages/ResetPassword.js';
 
 export default function App() {
   return (
@@ -177,6 +180,9 @@ export default function App() {
           }
         />
         <Route path="/p/:raceDayId" element={<PublicRaceDayPage />} />
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route
           path="/admin"
           element={
