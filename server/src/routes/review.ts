@@ -159,39 +159,39 @@ export function createReviewRouter(io: SocketIOServer): Router {
       const entries = reconcileTapes(reconcileTapeInput, dnsDqMap);
 
       if (parsed.data.save) {
-        await db.$transaction(async (tx) => {
-          for (const entry of entries) {
-            const existing = await tx.result.findFirst({
-              where: { entryId: entry.entryId, heatId },
+        for (const entry of entries) {
+          const existing = await db.result.findFirst({
+            where: { entryId: entry.entryId, heatId },
+          });
+          if (existing) {
+            await db.result.update({
+              where: { id: existing.id },
+              data: {
+                place: entry.place,
+                timeMs: entry.timeMs,
+                status: 'ok',
+              },
             });
-            if (existing) {
-              await tx.result.update({
-                where: { id: existing.id },
-                data: {
-                  place: entry.place,
-                  timeMs: entry.timeMs,
-                  status: 'ok',
-                },
-              });
-            } else {
-              await tx.result.create({
-                data: {
-                  entryId: entry.entryId,
-                  heatId,
-                  place: entry.place,
-                  timeMs: entry.timeMs,
-                  status: 'ok',
-                },
-              });
-            }
+          } else {
+            await db.result.create({
+              data: {
+                entryId: entry.entryId,
+                heatId,
+                place: entry.place,
+                timeMs: entry.timeMs,
+                status: 'ok',
+              },
+            });
           }
-        });
+        }
       }
 
       const all_agreed = entries.every((e) => e.status === 'ok');
       res.json({ entries, all_agreed });
-    } catch {
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (err) {
+      console.error('[reconcile]', err);
+      const msg = err instanceof Error ? err.message : 'Internal server error';
+      res.status(500).json({ error: msg });
     }
   });
 

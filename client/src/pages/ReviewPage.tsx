@@ -145,6 +145,7 @@ export default function ReviewPage() {
   const queryClient = useQueryClient();
   const [reconcilePreview, setReconcilePreview] = useState<ReconciliationEntry[] | null>(null);
   const [reconcileAllAgreed, setReconcileAllAgreed] = useState<boolean | null>(null);
+  const [reconcileSaved, setReconcileSaved] = useState(false);
   const [actionError, setActionError] = useState('');
   const [finalizeSuccess, setFinalizeSuccess] = useState(false);
 
@@ -187,10 +188,14 @@ export default function ReviewPage() {
     onSuccess: (data) => {
       setReconcilePreview(data.entries);
       setReconcileAllAgreed(data.all_agreed);
+      setReconcileSaved(true);
       void queryClient.invalidateQueries({ queryKey: ['heat-results', heatId] });
       setActionError('');
     },
-    onError: (err: ApiError) => setActionError(err.message),
+    onError: (err: ApiError) => {
+      setReconcileSaved(false);
+      setActionError(err.message);
+    },
   });
 
   const finalizeMutation = useMutation({
@@ -228,20 +233,26 @@ export default function ReviewPage() {
             <h2 className="font-semibold text-gray-800">Reconciliation</h2>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => previewMutation.mutate()}
-                disabled={previewMutation.isPending}
+                onClick={() => { setReconcileSaved(false); previewMutation.mutate(); }}
+                disabled={previewMutation.isPending || saveMutation.isPending}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors disabled:opacity-60"
               >
-                {previewMutation.isPending ? 'Previewing…' : 'Preview Reconciliation'}
+                {previewMutation.isPending ? 'Previewing…' : 'Preview (no save)'}
               </button>
               <button
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors disabled:opacity-60"
+                onClick={() => { setReconcileSaved(false); saveMutation.mutate(); }}
+                disabled={saveMutation.isPending || previewMutation.isPending}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors disabled:opacity-60"
               >
-                {saveMutation.isPending ? 'Applying…' : 'Apply & Save Reconciliation'}
+                {saveMutation.isPending ? 'Saving…' : '✓ Reconcile & Save Results'}
               </button>
             </div>
+
+            {reconcileSaved && (
+              <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg px-3 py-2 text-sm font-medium">
+                Results saved to database. See the Results section below.
+              </div>
+            )}
 
             {reconcilePreview && (
               <div className="space-y-2">
