@@ -73,6 +73,7 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
 // GET /api/divisions/:divisionId — get division details
 router.get('/:divisionId', requireAuth, async (req, res): Promise<void> => {
   const { divisionId } = req.params;
+  console.log('[division detail] divisionId:', divisionId, 'userId:', req.session.userId);
 
   try {
     // Check user is a member of this division
@@ -109,7 +110,8 @@ router.get('/:divisionId', requireAuth, async (req, res): Promise<void> => {
     }
 
     res.json({ division });
-  } catch {
+  } catch (err) {
+    console.error('[division detail error]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
