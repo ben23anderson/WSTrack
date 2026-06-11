@@ -83,6 +83,16 @@ export async function addLineupEntry(
   });
 }
 
+export interface LineupStatus {
+  raceId: string;
+  exists: boolean;
+  submitted: boolean;
+}
+
+export async function getLineupStatus(raceDayId: string): Promise<{ statuses: LineupStatus[] }> {
+  return apiFetch(`/race-days/${raceDayId}/races/lineup-status`);
+}
+
 export async function bulkAddLineupEntries(
   raceId: string,
   teamId: string,

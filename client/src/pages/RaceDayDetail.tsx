@@ -12,6 +12,8 @@ import type { DistanceData, ClassificationData } from '../api/divisionConfig.js'
 import { listTemplates } from '../api/raceDayTemplates.js';
 import type { RaceDayTemplateData } from '../api/raceDayTemplates.js';
 import { ApiError } from '../api/client.js';
+import { getLineupStatus } from '../api/lineups.js';
+import type { LineupStatus } from '../api/lineups.js';
 
 const STATUS_COLORS: Record<string, string> = {
   setup: 'bg-gray-100 text-gray-600',
@@ -186,6 +188,16 @@ export default function RaceDayDetail() {
 
   const isCoordinator = memberships.some(
     (m) => m.role === 'coordinator' && (!effectiveDivisionId || m.divisionId === effectiveDivisionId)
+  );
+  const isHeadCoach = memberships.some((m) => m.role === 'head_coach');
+
+  const lineupStatusQuery = useQuery<{ statuses: LineupStatus[] }, ApiError>({
+    queryKey: ['lineupStatus', raceDayId],
+    queryFn: () => getLineupStatus(raceDayId!),
+    enabled: !!raceDayId && isHeadCoach,
+  });
+  const lineupStatusMap = new Map(
+    (lineupStatusQuery.data?.statuses ?? []).map((s) => [s.raceId, s])
   );
 
   const distancesQuery = useQuery<{ distances: DistanceData[] }, ApiError>({
@@ -434,6 +446,16 @@ export default function RaceDayDetail() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <StatusBadge status={race.status} />
+                        {isHeadCoach && (race.status === 'setup' || race.status === 'boat_prep') && (() => {
+                          const ls = lineupStatusMap.get(race.id);
+                          if (ls?.submitted) {
+                            return <span className="text-xs font-medium bg-green-100 text-green-700 rounded-full px-2.5 py-1">Lineup ✓</span>;
+                          }
+                          if (ls?.exists) {
+                            return <span className="text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full px-2.5 py-1">Draft</span>;
+                          }
+                          return <span className="text-xs font-medium bg-gray-100 text-gray-400 rounded-full px-2.5 py-1">No lineup</span>;
+                        })()}
                         {isActive ? (
                           <Link
                             to={`/races/${race.id}`}

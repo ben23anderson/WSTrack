@@ -102,6 +102,45 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+// GET /api/race-days/:raceDayId/races/lineup-status
+router.get('/lineup-status', requireAuth, async (req, res): Promise<void> => {
+  const { raceDayId } = req.params;
+  const userId = req.session.userId!;
+  try {
+    const divisionId = await getRaceDayDivision(raceDayId);
+    if (!divisionId) { res.status(404).json({ error: 'Race day not found' }); return; }
+    if (!await isDivisionMember(userId, divisionId)) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    const coachMembership = await db.membership.findFirst({
+      where: { userId, role: 'head_coach', team: { divisionId } },
+      select: { teamId: true },
+    });
+
+    if (!coachMembership) {
+      res.json({ statuses: [] }); return;
+    }
+
+    const races = await db.race.findMany({ where: { raceDayId }, select: { id: true } });
+    const raceIds = races.map((r) => r.id);
+
+    const lineups = await db.lineup.findMany({
+      where: { raceId: { in: raceIds }, teamId: coachMembership.teamId },
+      select: { raceId: true, submitted: true },
+    });
+
+    const statusMap = new Map(lineups.map((l) => [l.raceId, l.submitted]));
+    const statuses = raceIds.map((raceId) => ({
+      raceId,
+      exists: statusMap.has(raceId),
+      submitted: statusMap.get(raceId) ?? false,
+    }));
+
+    res.json({ statuses });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/race-days/:raceDayId/races/:raceId
 router.get('/:raceId', requireAuth, async (req, res): Promise<void> => {
   const { raceDayId, raceId } = req.params;
