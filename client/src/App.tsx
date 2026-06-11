@@ -21,6 +21,7 @@ import ReviewPage from './pages/ReviewPage.js';
 import RaceResultsPage from './pages/RaceResultsPage.js';
 import FinalsPage from './pages/FinalsPage.js';
 import CreateLeaguePage from './pages/CreateLeaguePage.js';
+import TeamsPage from './pages/TeamsPage.js';
 
 export default function App() {
   return (
@@ -74,6 +75,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <RaceDaysPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/divisions/:divisionId/teams"
+          element={
+            <ProtectedRoute>
+              <TeamsPage />
             </ProtectedRoute>
           }
         />

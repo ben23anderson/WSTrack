@@ -72,3 +72,18 @@ export interface OfficialsResponse {
 export async function getDivisionOfficials(divisionId: string): Promise<OfficialsResponse> {
   return apiFetch<OfficialsResponse>(`/divisions/${divisionId}/officials`);
 }
+
+export interface ClassificationSummary {
+  id: string;
+  label: string;
+  isDoubles: boolean;
+  sortOrder: number;
+}
+
+export interface ClassificationsResponse {
+  classifications: ClassificationSummary[];
+}
+
+export async function getDivisionClassifications(divisionId: string): Promise<ClassificationsResponse> {
+  return apiFetch<ClassificationsResponse>(`/divisions/${divisionId}/classifications`);
+}

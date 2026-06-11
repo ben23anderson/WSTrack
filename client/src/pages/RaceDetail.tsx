@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
@@ -24,6 +24,8 @@ import { listScratches, scratchAthlete, unScratch } from '../api/scratches.js';
 import type { ScratchData } from '../api/scratches.js';
 import { listAthletes } from '../api/athletes.js';
 import type { AthleteData } from '../api/athletes.js';
+import { getHeats } from '../api/seeding.js';
+import type { HeatData } from '../api/seeding.js';
 
 interface LineupPanelProps {
   raceId: string;
@@ -182,6 +184,7 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
 export default function RaceDetail() {
   const { raceId } = useParams<{ raceId: string }>();
   const { memberships, user } = useAuthContext();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [subOutAthlete, setSubOutAthlete] = useState('');
@@ -189,6 +192,26 @@ export default function RaceDetail() {
   const [subError, setSubError] = useState('');
   const [scratchAthleteSel, setScratchAthleteSel] = useState('');
   const [scratchError, setScratchError] = useState('');
+
+  // Fetch race metadata (status, classification, etc.) via direct API call
+  const raceMetaQuery = useQuery<{ race: { id: string; status: string; classification?: { label: string }; distance?: { label: string } } }, ApiError>({
+    queryKey: ['race-meta', raceId],
+    queryFn: async () => {
+      const res = await fetch(`/api/races/${raceId ?? ''}`, { credentials: 'include' });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        throw new ApiError(res.status, body.error ?? 'Failed to load race');
+      }
+      return res.json() as Promise<{ race: { id: string; status: string; classification?: { label: string }; distance?: { label: string } } }>;
+    },
+    enabled: !!raceId,
+  });
+
+  const heatsQuery = useQuery<{ heats: HeatData[] }, ApiError>({
+    queryKey: ['heats', raceId],
+    queryFn: () => getHeats(raceId!),
+    enabled: !!raceId,
+  });
 
   const lineupsQuery = useQuery<{ lineups: LineupData[] }, ApiError>({
     queryKey: ['lineups', raceId],
@@ -285,6 +308,9 @@ export default function RaceDetail() {
   const substitutions = substitutionsQuery.data?.substitutions ?? [];
   const scratches = scratchesQuery.data?.scratches ?? [];
   const athletes = athletesQuery.data?.athletes ?? [];
+  const heats = heatsQuery.data?.heats ?? [];
+  const raceStatus = raceMetaQuery.data?.race.status ?? null;
+  const raceMeta = raceMetaQuery.data?.race ?? null;
 
   // Find if current user is the primary official for this race day
   // We determine this by checking substitutions where the user reviewed them
@@ -314,9 +340,53 @@ export default function RaceDetail() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Race</h1>
-          <p className="text-sm text-gray-500 mt-1">ID: {raceId}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            ← Back
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900 mt-1">Race</h1>
+          {raceMeta?.classification && raceMeta?.distance && (
+            <p className="text-sm text-gray-500">{raceMeta.classification.label} · {raceMeta.distance.label}</p>
+          )}
+          {raceStatus && (
+            <span className={`inline-block mt-1 text-xs font-medium rounded-full px-2.5 py-1 ${
+              raceStatus === 'live' ? 'bg-green-100 text-green-700' :
+              raceStatus === 'seeded' ? 'bg-blue-100 text-blue-700' :
+              raceStatus === 'setup' ? 'bg-gray-100 text-gray-600' :
+              raceStatus === 'boat_prep' ? 'bg-yellow-100 text-yellow-700' :
+              raceStatus === 'review' ? 'bg-orange-100 text-orange-700' :
+              raceStatus === 'published' ? 'bg-purple-100 text-purple-700' :
+              'bg-gray-100 text-gray-600'
+            }`}>
+              {raceStatus}
+            </span>
+          )}
         </div>
+
+        {/* Seeded / live CTA: show heat start buttons prominently */}
+        {(raceStatus === 'seeded' || raceStatus === 'live') && heats.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-base font-semibold text-gray-700">
+              {raceStatus === 'seeded' ? 'Ready to race — open officiating' : 'Live Heats'}
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {heats
+                .slice()
+                .sort((a, b) => a.heatNumber - b.heatNumber)
+                .map((heat) => (
+                  <Link
+                    key={heat.id}
+                    to={`/heats/${heat.id}/officiate?raceId=${raceId ?? ''}`}
+                    className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl px-5 py-3 text-sm min-h-11 transition-colors"
+                  >
+                    Start Heat {heat.heatNumber} →
+                  </Link>
+                ))}
+            </div>
+          </section>
+        )}
 
         {/* Navigation links */}
         <div className="flex flex-wrap gap-2">

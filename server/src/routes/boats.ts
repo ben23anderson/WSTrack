@@ -1,40 +1,13 @@
 import { Router } from 'express';
 import db from '../lib/db.js';
-import { requireBoatInventoryAccess } from '../middleware/requireAuth.js';
+import { requireBoatInventoryAccess, requireBoatRead } from '../middleware/requireAuth.js';
 import { CreateBoatSchema, UpdateBoatSchema } from '../lib/validation.js';
-import type { Request, Response, NextFunction } from 'express';
-
-/** Checks for any Membership with userId = session.userId AND teamId = req.params[teamIdParam]. */
-function requireTeamMember(
-  teamIdParam: string
-): (req: Request, res: Response, next: NextFunction) => void {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.session.userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-    const teamId = req.params[teamIdParam];
-    try {
-      const membership = await db.membership.findFirst({
-        where: { userId: req.session.userId, teamId },
-      });
-      if (!membership) {
-        res.status(403).json({ error: 'Forbidden' });
-        return;
-      }
-      req.membership = membership;
-      next();
-    } catch {
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  };
-}
 
 export function createBoatsRouter(): Router {
   const router = Router({ mergeParams: true });
 
   // GET /api/teams/:teamId/boats
-  router.get('/', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/', requireBoatRead('teamId'), async (req, res): Promise<void> => {
     const { teamId } = req.params;
     try {
       const boats = await db.boat.findMany({
@@ -73,7 +46,7 @@ export function createBoatsRouter(): Router {
   });
 
   // GET /api/teams/:teamId/boats/:boatId
-  router.get('/:boatId', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/:boatId', requireBoatRead('teamId'), async (req, res): Promise<void> => {
     const { teamId, boatId } = req.params;
     try {
       const boat = await db.boat.findFirst({

@@ -55,11 +55,13 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
         },
         orderBy: { name: 'asc' },
       });
       res.json({ athletes });
-    } catch {
+    } catch (err) {
+      console.error('[GET /athletes]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -78,15 +80,18 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           teamId,
           name: parsed.data.name,
           grade: parsed.data.grade,
+          ...(parsed.data.classificationId ? { classificationId: parsed.data.classificationId } : {}),
         },
         include: {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
         },
       });
       res.status(201).json({ athlete });
-    } catch {
+    } catch (err) {
+      console.error('[POST /athletes]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -101,6 +106,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
         },
       });
       if (!athlete) {
@@ -108,7 +114,8 @@ export function createAthletesRouter(storage: StorageProvider): Router {
         return;
       }
       res.json({ athlete });
-    } catch {
+    } catch (err) {
+      console.error('[GET /athletes/:athleteId]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -134,15 +141,18 @@ export function createAthletesRouter(storage: StorageProvider): Router {
         data: {
           ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
           ...(parsed.data.grade !== undefined ? { grade: parsed.data.grade } : {}),
+          ...(parsed.data.classificationId !== undefined ? { classificationId: parsed.data.classificationId } : {}),
         },
         include: {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
         },
       });
       res.json({ athlete });
-    } catch {
+    } catch (err) {
+      console.error('[PATCH /athletes/:athleteId]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -163,7 +173,8 @@ export function createAthletesRouter(storage: StorageProvider): Router {
         data: { deletedAt: new Date() },
       });
       res.json({ ok: true });
-    } catch {
+    } catch (err) {
+      console.error('[DELETE /athletes/:athleteId]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -203,10 +214,12 @@ export function createAthletesRouter(storage: StorageProvider): Router {
             bestTimes: {
               include: { distance: { select: { id: true, label: true, sortOrder: true } } },
             },
+            classification: { select: { id: true, label: true } },
           },
         });
         res.json({ athlete });
-      } catch {
+      } catch (err) {
+        console.error('[POST /athletes/:athleteId/photo]', err);
         res.status(500).json({ error: 'Internal server error' });
       }
     }

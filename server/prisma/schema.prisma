@@ -108,8 +108,9 @@ model Classification {
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
 
-  division Division @relation(fields: [divisionId], references: [id])
+  division Division  @relation(fields: [divisionId], references: [id])
   races    Race[]
+  athletes Athlete[]
 }
 
 // ─── Teams / athletes / boats ──────────────────────────────────────────────────
@@ -136,21 +137,23 @@ model Team {
 }
 
 model Athlete {
-  id        String    @id @default(cuid()) @db.VarChar(30)
-  teamId    String    @db.VarChar(30)
-  name      String
-  grade     String?
-  photoUrl  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id               String    @id @default(cuid()) @db.VarChar(30)
+  teamId           String    @db.VarChar(30)
+  name             String
+  grade            String?
+  photoUrl         String?
+  classificationId String?   @db.VarChar(30)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
 
-  team          Team              @relation(fields: [teamId], references: [id])
-  bestTimes     AthleteBestTime[]
-  lineupEntries LineupEntry[]
-  subOut        Substitution[]    @relation("SubOut")
-  subIn         Substitution[]    @relation("SubIn")
-  scratches     Scratch[]
+  team           Team              @relation(fields: [teamId], references: [id])
+  classification Classification?   @relation(fields: [classificationId], references: [id])
+  bestTimes      AthleteBestTime[]
+  lineupEntries  LineupEntry[]
+  subOut         Substitution[]    @relation("SubOut")
+  subIn          Substitution[]    @relation("SubIn")
+  scratches      Scratch[]
 }
 
 model AthleteBestTime {

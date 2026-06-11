@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { useTeamAccess } from '../hooks/useTeamAccess.js';
@@ -13,6 +13,10 @@ import {
   deleteBestTime,
 } from '../api/athletes.js';
 import type { AthleteData, BestTimeData } from '../api/athletes.js';
+import { getTeam } from '../api/teams.js';
+import type { TeamData } from '../api/teams.js';
+import { getDivisionClassifications } from '../api/divisions.js';
+import type { ClassificationSummary } from '../api/divisions.js';
 import { ApiError } from '../api/client.js';
 
 /** Parse "M:SS.ss" or "MM:SS.ss" to milliseconds. Returns null if invalid. */
@@ -216,18 +220,29 @@ function BestTimesEditor({ teamId, athlete, canEdit }: BestTimesEditorProps) {
 interface AthleteFormProps {
   initialName?: string;
   initialGrade?: string;
-  onSubmit: (name: string, grade: string) => void;
+  initialClassificationId?: string;
+  classifications: ClassificationSummary[];
+  onSubmit: (name: string, grade: string, classificationId: string) => void;
   onCancel: () => void;
   isPending: boolean;
 }
 
-function AthleteForm({ initialName = '', initialGrade = '', onSubmit, onCancel, isPending }: AthleteFormProps) {
+function AthleteForm({
+  initialName = '',
+  initialGrade = '',
+  initialClassificationId = '',
+  classifications,
+  onSubmit,
+  onCancel,
+  isPending,
+}: AthleteFormProps) {
   const [name, setName] = useState(initialName);
   const [grade, setGrade] = useState(initialGrade);
+  const [classificationId, setClassificationId] = useState(initialClassificationId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim()) onSubmit(name.trim(), grade.trim());
+    if (name.trim()) onSubmit(name.trim(), grade.trim(), classificationId);
   };
 
   return (
@@ -254,6 +269,24 @@ function AthleteForm({ initialName = '', initialGrade = '', onSubmit, onCancel, 
           placeholder="e.g. 10"
         />
       </div>
+      {classifications.length > 0 && (
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Classification</label>
+          <select
+            value={classificationId}
+            onChange={(e) => setClassificationId(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11 bg-white"
+          >
+            <option value="">— None —</option>
+            {classifications
+              .slice()
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+          </select>
+        </div>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"
@@ -278,17 +311,18 @@ interface AthleteCardProps {
   athlete: AthleteData;
   teamId: string;
   canManageRoster: boolean;
+  classifications: ClassificationSummary[];
   onDelete: (id: string) => void;
 }
 
-function AthleteCard({ athlete, teamId, canManageRoster, onDelete }: AthleteCardProps) {
+function AthleteCard({ athlete, teamId, canManageRoster, classifications, onDelete }: AthleteCardProps) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateMutation = useMutation({
-    mutationFn: (data: { name?: string; grade?: string }) =>
+    mutationFn: (data: { name?: string; grade?: string; classificationId?: string }) =>
       updateAthlete(teamId, athlete.id, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['athletes', teamId] });
@@ -348,7 +382,15 @@ function AthleteCard({ athlete, teamId, canManageRoster, onDelete }: AthleteCard
             <AthleteForm
               initialName={athlete.name}
               initialGrade={athlete.grade ?? ''}
-              onSubmit={(name, grade) => updateMutation.mutate({ name, grade: grade || undefined })}
+              initialClassificationId={athlete.classificationId ?? ''}
+              classifications={classifications}
+              onSubmit={(name, grade, classificationId) =>
+                updateMutation.mutate({
+                  name,
+                  grade: grade || undefined,
+                  classificationId: classificationId || undefined,
+                })
+              }
               onCancel={() => setIsEditing(false)}
               isPending={updateMutation.isPending}
             />
@@ -358,6 +400,11 @@ function AthleteCard({ athlete, teamId, canManageRoster, onDelete }: AthleteCard
                 <p className="font-semibold text-gray-900">{athlete.name}</p>
                 {athlete.grade && (
                   <p className="text-xs text-gray-500">Grade {athlete.grade}</p>
+                )}
+                {athlete.classification && (
+                  <span className="inline-block text-xs bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 mt-0.5">
+                    {athlete.classification.label}
+                  </span>
                 )}
               </div>
               {canManageRoster && (
@@ -397,6 +444,22 @@ export default function RosterPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [error, setError] = useState('');
 
+  const { data: teamData } = useQuery<{ team: TeamData }, ApiError>({
+    queryKey: ['team', teamId],
+    queryFn: () => getTeam(teamId!),
+    enabled: !!teamId,
+  });
+
+  const divisionId = teamData?.team.divisionId;
+
+  const { data: classificationsData } = useQuery<{ classifications: ClassificationSummary[] }, ApiError>({
+    queryKey: ['divisionClassifications', divisionId],
+    queryFn: () => getDivisionClassifications(divisionId!),
+    enabled: !!divisionId,
+  });
+
+  const classifications = classificationsData?.classifications ?? [];
+
   const { data, isLoading } = useQuery<{ athletes: AthleteData[] }, ApiError>({
     queryKey: ['athletes', teamId],
     queryFn: () => listAthletes(teamId!),
@@ -404,7 +467,7 @@ export default function RosterPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (input: { name: string; grade?: string }) =>
+    mutationFn: (input: { name: string; grade?: string; classificationId?: string }) =>
       createAthlete(teamId!, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['athletes', teamId] });
@@ -428,7 +491,15 @@ export default function RosterPage() {
     <Layout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Roster</h1>
+          <div>
+            <Link
+              to={`/teams/${teamId ?? ''}`}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              ← Back
+            </Link>
+            <h1 className="text-2xl font-bold text-gray-900">Roster</h1>
+          </div>
           {canManageRoster && !showAddForm && (
             <button
               onClick={() => setShowAddForm(true)}
@@ -449,8 +520,13 @@ export default function RosterPage() {
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <h2 className="text-base font-semibold text-gray-700 mb-3">New Athlete</h2>
             <AthleteForm
-              onSubmit={(name, grade) =>
-                createMutation.mutate({ name, grade: grade || undefined })
+              classifications={classifications}
+              onSubmit={(name, grade, classificationId) =>
+                createMutation.mutate({
+                  name,
+                  grade: grade || undefined,
+                  classificationId: classificationId || undefined,
+                })
               }
               onCancel={() => {
                 setShowAddForm(false);
@@ -477,6 +553,7 @@ export default function RosterPage() {
                 athlete={athlete}
                 teamId={teamId!}
                 canManageRoster={canManageRoster}
+                classifications={classifications}
                 onDelete={(id) => deleteMutation.mutate(id)}
               />
             ))}

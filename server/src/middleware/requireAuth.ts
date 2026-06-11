@@ -125,7 +125,7 @@ export function requireRosterAccess(
         next();
         return;
       }
-      // Check assistant_coach with roster permission
+      // Check assistant_coach — then verify roster permission in JS (MariaDB JSON filter unreliable)
       const assistant = await db.membership.findFirst({
         where: { userId: req.session.userId, role: 'assistant_coach', teamId },
       });
@@ -138,7 +138,8 @@ export function requireRosterAccess(
         }
       }
       res.status(403).json({ error: 'Forbidden' });
-    } catch {
+    } catch (err) {
+      console.error('[requireRosterAccess]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   };
@@ -215,38 +216,76 @@ export function requireRosterRead(
   teamIdParam: string
 ): (req: Request, res: Response, next: NextFunction) => void {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.session.userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    if (!req.session.userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
     const teamId = req.params[teamIdParam];
     try {
-      const team = await db.team.findUnique({
-        where: { id: teamId },
-        select: { divisionId: true },
-      });
-      if (!team) {
-        res.status(404).json({ error: 'Team not found' });
-        return;
-      }
+      const team = await db.team.findUnique({ where: { id: teamId }, select: { divisionId: true } });
+      if (!team) { res.status(404).json({ error: 'Team not found' }); return; }
+
       const membership = await db.membership.findFirst({
         where: {
           userId: req.session.userId,
           OR: [
             { teamId, role: 'head_coach' },
-            { teamId, role: 'assistant_coach', permissions: { path: ['roster'], equals: true } },
+            { teamId, role: 'assistant_coach' },
             { divisionId: team.divisionId, role: 'coordinator' },
             { divisionId: team.divisionId, role: 'official' },
           ],
         },
       });
-      if (!membership) {
-        res.status(403).json({ error: 'Forbidden' });
-        return;
+
+      if (!membership) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+      // For assistant_coach, check roster permission in JS (MariaDB JSON filter unreliable)
+      if (membership.role === 'assistant_coach') {
+        const perms = membership.permissions as Record<string, boolean> | null;
+        if (!perms?.roster) { res.status(403).json({ error: 'Forbidden' }); return; }
       }
+
       req.membership = membership;
       next();
-    } catch {
+    } catch (err) {
+      console.error('[requireRosterRead]', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}
+
+/** Requires head_coach OR assistant_coach with boat_inventory, OR coordinator/official of the team's division. */
+export function requireBoatRead(
+  teamIdParam: string
+): (req: Request, res: Response, next: NextFunction) => void {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.session.userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const teamId = req.params[teamIdParam];
+    try {
+      const team = await db.team.findUnique({ where: { id: teamId }, select: { divisionId: true } });
+      if (!team) { res.status(404).json({ error: 'Team not found' }); return; }
+
+      const membership = await db.membership.findFirst({
+        where: {
+          userId: req.session.userId,
+          OR: [
+            { teamId, role: 'head_coach' },
+            { teamId, role: 'assistant_coach' },
+            { divisionId: team.divisionId, role: 'coordinator' },
+            { divisionId: team.divisionId, role: 'official' },
+          ],
+        },
+      });
+
+      if (!membership) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+      // For assistant_coach, check boat_inventory permission in JS (MariaDB JSON filter unreliable)
+      if (membership.role === 'assistant_coach') {
+        const perms = membership.permissions as Record<string, boolean> | null;
+        if (!perms?.boat_inventory) { res.status(403).json({ error: 'Forbidden' }); return; }
+      }
+
+      req.membership = membership;
+      next();
+    } catch (err) {
+      console.error('[requireBoatRead]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   };

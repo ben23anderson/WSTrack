@@ -217,27 +217,49 @@ export default function RaceDayDetail() {
             <p className="text-gray-500 text-sm">No races scheduled.</p>
           ) : (
             <ul className="space-y-2">
-              {races.map((race) => (
-                <li key={race.id}>
-                  <Link
-                    to={`/races/${race.id}`}
-                    className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {race.classification?.label ?? '—'} · {race.distance?.label ?? '—'}
-                      </p>
-                      <p className="text-xs text-gray-500">{race.laneCount} lanes</p>
+              {races.map((race) => {
+                const isActive = race.status === 'seeded' || race.status === 'live';
+                const isSetup = race.status === 'setup';
+                return (
+                  <li key={race.id} className={`rounded-xl border overflow-hidden ${isActive ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className={`font-medium ${isActive ? 'text-green-900' : 'text-gray-900'}`}>
+                          {race.classification?.label ?? '—'} · {race.distance?.label ?? '—'}
+                        </p>
+                        <p className="text-xs text-gray-500">{race.laneCount} lanes</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <StatusBadge status={race.status} />
+                        {isActive ? (
+                          <Link
+                            to={`/races/${race.id}`}
+                            className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg px-3 py-2 text-sm min-h-11 transition-colors"
+                          >
+                            Go to Race →
+                          </Link>
+                        ) : isSetup ? (
+                          <Link
+                            to={`/races/${race.id}`}
+                            className="text-xs text-gray-500 hover:text-gray-700 underline px-2 min-h-11 flex items-center"
+                          >
+                            Set up
+                          </Link>
+                        ) : (
+                          <Link
+                            to={`/races/${race.id}`}
+                            className="flex items-center"
+                          >
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={race.status} />
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </Link>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
 

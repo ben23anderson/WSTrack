@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { getTeam, getMembers, inviteUser, updateMember, removeMember } from '../api/teams.js';
@@ -16,6 +16,7 @@ const DEFAULT_PERMISSIONS: AssistantPermissions = {
 export default function TeamDetail() {
   const { teamId } = useParams<{ teamId: string }>();
   const { user, memberships } = useAuthContext();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [inviteEmail, setInviteEmail] = useState('');
@@ -117,7 +118,13 @@ export default function TeamDetail() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <p className="text-sm text-gray-500">{team.division.name}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            ← Back
+          </button>
+          <p className="text-sm text-gray-500 mt-1">{team.division.name}</p>
           <h1 className="text-2xl font-bold text-gray-900">{team.name}</h1>
         </div>
 

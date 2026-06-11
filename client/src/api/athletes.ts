@@ -22,6 +22,8 @@ export interface AthleteData {
   name: string;
   grade: string | null;
   photoUrl: string | null;
+  classificationId: string | null;
+  classification: { id: string; label: string } | null;
   createdAt: string;
   deletedAt: string | null;
   bestTimes: BestTimeData[];
@@ -45,7 +47,7 @@ export async function listAthletes(teamId: string): Promise<AthletesResponse> {
 
 export async function createAthlete(
   teamId: string,
-  data: { name: string; grade?: string }
+  data: { name: string; grade?: string; classificationId?: string }
 ): Promise<AthleteResponse> {
   return apiFetch<AthleteResponse>(`/teams/${teamId}/athletes`, {
     method: 'POST',
@@ -56,7 +58,7 @@ export async function createAthlete(
 export async function updateAthlete(
   teamId: string,
   athleteId: string,
-  data: { name?: string; grade?: string }
+  data: { name?: string; grade?: string; classificationId?: string }
 ): Promise<AthleteResponse> {
   return apiFetch<AthleteResponse>(`/teams/${teamId}/athletes/${athleteId}`, {
     method: 'PATCH',

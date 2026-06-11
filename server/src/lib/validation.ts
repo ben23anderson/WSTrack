@@ -58,11 +58,13 @@ export type UpdatePermissionsInput = z.infer<typeof UpdatePermissionsSchema>;
 export const CreateAthleteSchema = z.object({
   name: z.string().min(1),
   grade: z.string().optional(),
+  classificationId: z.string().cuid().optional(),
 });
 
 export const UpdateAthleteSchema = z.object({
   name: z.string().min(1).optional(),
   grade: z.string().optional(),
+  classificationId: z.string().cuid().optional(),
 });
 
 export const UpsertBestTimeSchema = z.object({
