@@ -4,16 +4,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { ApiError } from '../api/client.js';
+import { getRaceInfo } from '../api/races.js';
+import type { RaceResponse } from '../api/races.js';
 import {
   getLineups,
   getOrCreateLineup,
   submitLineup,
   unsubmitLineup,
   getLineupEntries,
-  addLineupEntry,
+  bulkAddLineupEntries,
   removeLineupEntry,
 } from '../api/lineups.js';
-import type { LineupData, LineupEntry } from '../api/lineups.js';
+import type { LineupData, LineupEntry, LineupsResponse } from '../api/lineups.js';
 import {
   listSubstitutions,
   requestSubstitution,
@@ -24,36 +26,52 @@ import { listScratches, scratchAthlete, unScratch } from '../api/scratches.js';
 import type { ScratchData } from '../api/scratches.js';
 import { listAthletes } from '../api/athletes.js';
 import type { AthleteData } from '../api/athletes.js';
+import { getHeats } from '../api/seeding.js';
+import type { HeatData } from '../api/seeding.js';
+
+function formatTime(ms: number): string {
+  const totalSeconds = ms / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const secs = (totalSeconds % 60).toFixed(2).padStart(5, '0');
+  return `${minutes}:${secs}`;
+}
 
 interface LineupPanelProps {
   raceId: string;
   lineup: LineupData;
   isCoach: boolean;
   athletes: AthleteData[];
+  raceClassificationId: string | null;
+  raceDistanceId: string | null;
+  raceStatus: string | null;
   onRefresh: () => void;
 }
 
-function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPanelProps) {
+function LineupPanel({ raceId, lineup, isCoach, athletes, raceClassificationId, raceDistanceId, raceStatus, onRefresh }: LineupPanelProps) {
   const queryClient = useQueryClient();
-  const [selectedAthlete, setSelectedAthlete] = useState('');
-  const [entryError, setEntryError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [entryMessage, setEntryMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   const entriesQuery = useQuery<{ entries: LineupEntry[] }, ApiError>({
     queryKey: ['entries', raceId, lineup.teamId],
     queryFn: () => getLineupEntries(raceId, lineup.teamId),
   });
 
-  const addMutation = useMutation({
-    mutationFn: (athleteId: string) =>
-      addLineupEntry(raceId, lineup.teamId, { athlete_id: athleteId }),
-    onSuccess: () => {
+  const bulkAddMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      bulkAddLineupEntries(raceId, lineup.teamId, { athlete_ids: ids }),
+    onSuccess: ({ errors }) => {
       void queryClient.invalidateQueries({ queryKey: ['entries', raceId, lineup.teamId] });
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
-      setSelectedAthlete('');
-      setEntryError('');
+      setSelectedIds(new Set());
+      if (errors.length > 0) {
+        setEntryMessage({ text: `${errors.length} athlete(s) could not be added (already entered today).`, isError: false });
+      } else {
+        setEntryMessage(null);
+      }
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
 
   const removeMutation = useMutation({
@@ -63,7 +81,7 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
 
   const submitMutation = useMutation({
@@ -72,7 +90,7 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
 
   const unsubmitMutation = useMutation({
@@ -81,12 +99,25 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
       void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] });
       onRefresh();
     },
-    onError: (err: ApiError) => setEntryError(err.message),
+    onError: (err: ApiError) => setEntryMessage({ text: err.message, isError: true }),
   });
+
+  const toggleAthlete = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const entries = entriesQuery.data?.entries ?? lineup.entries;
   const enteredAthleteIds = new Set(entries.map((e) => e.athleteId));
-  const availableAthletes = athletes.filter((a) => !enteredAthleteIds.has(a.id));
+  // Filter by classification: null means open (all athletes eligible)
+  const classificationFiltered = raceClassificationId
+    ? athletes.filter((a) => a.classificationId === raceClassificationId)
+    : athletes;
+  const availableAthletes = classificationFiltered.filter((a) => !enteredAthleteIds.has(a.id));
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
@@ -124,46 +155,89 @@ function LineupPanel({ raceId, lineup, isCoach, athletes, onRefresh }: LineupPan
         </ul>
       )}
 
-      {entryError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-xs">
-          {entryError}
+      {entryMessage && (
+        <div className={`rounded-lg px-3 py-2 text-xs border ${entryMessage.isError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
+          {entryMessage.text}
         </div>
       )}
 
       {isCoach && !lineup.submitted && (
-        <div className="flex gap-2">
-          <select
-            value={selectedAthlete}
-            onChange={(e) => setSelectedAthlete(e.target.value)}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
-          >
-            <option value="">Add athlete…</option>
-            {availableAthletes.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              if (selectedAthlete) addMutation.mutate(selectedAthlete);
-            }}
-            disabled={!selectedAthlete || addMutation.isPending}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-3 py-2 text-sm min-h-11 transition-colors"
-          >
-            Add
-          </button>
+        <div className="space-y-2">
+          {availableAthletes.length > 0 && (
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Select athletes to add
+              {raceDistanceId && <span className="normal-case font-normal ml-1">— showing best times for this race distance</span>}
+            </p>
+          )}
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {availableAthletes.length === 0 ? (
+              <p className="text-sm text-gray-400">All athletes are in the lineup.</p>
+            ) : (
+              availableAthletes.map((a) => {
+                const bestTime = raceDistanceId
+                  ? a.bestTimes.find((bt) => bt.distanceId === raceDistanceId)
+                  : undefined;
+                const timeLabel = bestTime ? formatTime(bestTime.timeMs) : 'No time';
+                const isSelected = selectedIds.has(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => toggleAthlete(a.id)}
+                    className={`w-full text-left border rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className={`font-medium ${isSelected ? 'text-blue-800' : 'text-gray-800'}`}>
+                          {a.name}
+                        </span>
+                        {a.grade && (
+                          <span className="text-xs text-gray-400 ml-1.5">Gr.&nbsp;{a.grade}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-xs font-mono ${bestTime ? 'text-gray-600' : 'text-gray-300'}`}>
+                          {timeLabel}
+                        </span>
+                        {isSelected && (
+                          <span className="text-blue-500 font-semibold text-sm">✓</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => bulkAddMutation.mutate([...selectedIds])}
+              disabled={bulkAddMutation.isPending}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
+            >
+              {bulkAddMutation.isPending
+                ? 'Adding…'
+                : `Add ${selectedIds.size} athlete${selectedIds.size !== 1 ? 's' : ''}`}
+            </button>
+          )}
         </div>
       )}
 
       {isCoach && (
         <div>
           {lineup.submitted ? (
-            <button
-              onClick={() => unsubmitMutation.mutate()}
-              disabled={unsubmitMutation.isPending}
-              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors"
-            >
-              {unsubmitMutation.isPending ? 'Unsubmitting…' : 'Un-submit Lineup'}
-            </button>
+            !['live', 'review', 'published'].includes(raceStatus ?? '') && (
+              <button
+                onClick={() => unsubmitMutation.mutate()}
+                disabled={unsubmitMutation.isPending}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-3 text-sm min-h-11 transition-colors"
+              >
+                {unsubmitMutation.isPending ? 'Unsubmitting…' : 'Un-submit Lineup'}
+              </button>
+            )
           ) : (
             <button
               onClick={() => submitMutation.mutate()}
@@ -190,7 +264,20 @@ export default function RaceDetail() {
   const [scratchAthleteSel, setScratchAthleteSel] = useState('');
   const [scratchError, setScratchError] = useState('');
 
-  const lineupsQuery = useQuery<{ lineups: LineupData[] }, ApiError>({
+  // Fetch race metadata (status, classification, raceDayId, etc.)
+  const raceMetaQuery = useQuery<RaceResponse, ApiError>({
+    queryKey: ['race-meta', raceId],
+    queryFn: () => getRaceInfo(raceId!),
+    enabled: !!raceId,
+  });
+
+  const heatsQuery = useQuery<{ heats: HeatData[] }, ApiError>({
+    queryKey: ['heats', raceId],
+    queryFn: () => getHeats(raceId!),
+    enabled: !!raceId,
+  });
+
+  const lineupsQuery = useQuery<LineupsResponse, ApiError>({
     queryKey: ['lineups', raceId],
     queryFn: () => getLineups(raceId!),
     enabled: !!raceId,
@@ -282,9 +369,14 @@ export default function RaceDetail() {
   });
 
   const lineups = lineupsQuery.data?.lineups ?? [];
+  const raceDistanceId = lineupsQuery.data?.race?.distanceId ?? null;
   const substitutions = substitutionsQuery.data?.substitutions ?? [];
   const scratches = scratchesQuery.data?.scratches ?? [];
   const athletes = athletesQuery.data?.athletes ?? [];
+  const heats = heatsQuery.data?.heats ?? [];
+  const raceStatus = raceMetaQuery.data?.race.status ?? null;
+  const raceMeta = raceMetaQuery.data?.race ?? null;
+  const raceDayId = raceMeta?.raceDayId;
 
   // Find if current user is the primary official for this race day
   // We determine this by checking substitutions where the user reviewed them
@@ -314,30 +406,78 @@ export default function RaceDetail() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Race</h1>
-          <p className="text-sm text-gray-500 mt-1">ID: {raceId}</p>
+          <Link
+            to={`/race-days/${raceDayId ?? ''}`}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            ← Back
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900 mt-1">Race</h1>
+          {raceMeta?.classification && raceMeta?.distance && (
+            <p className="text-sm text-gray-500">{raceMeta.classification.label} · {raceMeta.distance.label}</p>
+          )}
+          {raceStatus && (
+            <span className={`inline-block mt-1 text-xs font-medium rounded-full px-2.5 py-1 ${
+              raceStatus === 'live' ? 'bg-green-100 text-green-700' :
+              raceStatus === 'seeded' ? 'bg-blue-100 text-blue-700' :
+              raceStatus === 'setup' ? 'bg-gray-100 text-gray-600' :
+              raceStatus === 'boat_prep' ? 'bg-yellow-100 text-yellow-700' :
+              raceStatus === 'review' ? 'bg-orange-100 text-orange-700' :
+              raceStatus === 'published' ? 'bg-purple-100 text-purple-700' :
+              'bg-gray-100 text-gray-600'
+            }`}>
+              {raceStatus}
+            </span>
+          )}
         </div>
+
+        {/* Seeded / live CTA: show heat start buttons prominently */}
+        {(raceStatus === 'seeded' || raceStatus === 'live') && heats.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-base font-semibold text-gray-700">
+              {raceStatus === 'seeded' ? 'Ready to race — open officiating' : 'Live Heats'}
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {heats
+                .slice()
+                .sort((a, b) => a.heatNumber - b.heatNumber)
+                .map((heat) => (
+                  <Link
+                    key={heat.id}
+                    to={`/heats/${heat.id}/officiate?raceId=${raceId ?? ''}${raceDayId ? `&raceDayId=${raceDayId}` : ''}`}
+                    className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl px-5 py-3 text-sm min-h-11 transition-colors"
+                  >
+                    Start Heat {heat.heatNumber} →
+                  </Link>
+                ))}
+            </div>
+          </section>
+        )}
 
         {/* Navigation links */}
         <div className="flex flex-wrap gap-2">
           <Link
-            to={`/races/${raceId}/heats`}
+            to={`/races/${raceId}/heats${raceDayId ? `?raceDayId=${raceDayId}` : ''}`}
             className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
           >
             View Heat Sheet
           </Link>
-          <Link
-            to={`/races/${raceId}/results`}
-            className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
-          >
-            Results
-          </Link>
-          <Link
-            to={`/races/${raceId}/finals`}
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
-          >
-            Finals
-          </Link>
+          {(raceStatus === 'review' || raceStatus === 'published') && (
+            <Link
+              to={`/races/${raceId}/results`}
+              className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+            >
+              Results
+            </Link>
+          )}
+          {(raceStatus === 'review' || raceStatus === 'published') && raceMeta?.hasFinals && (
+            <Link
+              to={`/races/${raceId}/finals`}
+              className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm transition-colors"
+            >
+              Finals
+            </Link>
+          )}
         </div>
 
         {/* Head coach: get/create lineup button */}
@@ -366,6 +506,9 @@ export default function RaceDetail() {
                 lineup={lineup}
                 isCoach={false}
                 athletes={[]}
+                raceClassificationId={raceMeta?.classification?.label?.toLowerCase() === 'open' ? null : (raceMeta?.classificationId ?? null)}
+                raceDistanceId={raceDistanceId}
+                raceStatus={raceStatus}
                 onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
               />
             ))
@@ -377,13 +520,16 @@ export default function RaceDetail() {
               lineup={myLineup}
               isCoach={true}
               athletes={athletes}
+              raceClassificationId={raceMeta?.classificationId ?? null}
+              raceDistanceId={raceDistanceId}
+              raceStatus={raceStatus}
               onRefresh={() => void queryClient.invalidateQueries({ queryKey: ['lineups', raceId] })}
             />
           ) : null}
         </section>
 
         {/* Substitution request form (head coach) */}
-        {isHeadCoach && myLineup && myLineupEntries.length > 0 && (
+        {isHeadCoach && myLineup && myLineupEntries.length > 0 && !['live', 'review', 'published'].includes(raceStatus ?? '') && (
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-gray-800">Request Substitution</h2>
             <form onSubmit={handleSubRequest} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
@@ -486,7 +632,7 @@ export default function RaceDetail() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-gray-800">Scratches</h2>
 
-          {isHeadCoach && scratchableAthletes.length > 0 && (
+          {isHeadCoach && scratchableAthletes.length > 0 && !['live', 'review', 'published'].includes(raceStatus ?? '') && (
             <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
               {scratchError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">

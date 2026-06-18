@@ -1,5 +1,4 @@
 import React, { createContext, useContext } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth.js';
 import type { UserData, MembershipData } from '../api/auth.js';
 
@@ -7,18 +6,16 @@ interface AuthContextValue {
   user: UserData | null;
   memberships: MembershipData[];
   isLoading: boolean;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const queryClient = useQueryClient();
   const { user, memberships, isLoading, refetch } = useAuth();
 
   const handleRefetch = () => {
-    void queryClient.invalidateQueries({ queryKey: ['me'] });
-    void refetch();
+    return refetch();
   };
 
   return (

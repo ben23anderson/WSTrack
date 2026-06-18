@@ -56,12 +56,20 @@ export function createSocketServer(
         });
         if (!membership) return;
         void socket.join(`heat:${heatId}`);
-        // Resync: send current tape state
-        const tapes = await db.officialTape.findMany({
-          where: { heatId },
-          include: { finishEvents: { orderBy: { sequence: 'asc' } }, official: { select: { id: true, name: true } } },
+        // Resync: send current tape state + heat timestamps
+        const [tapes, heatRow] = await Promise.all([
+          db.officialTape.findMany({
+            where: { heatId },
+            include: { finishEvents: { orderBy: { sequence: 'asc' } }, official: { select: { id: true, name: true } } },
+          }),
+          db.heat.findUnique({ where: { id: heatId }, select: { startTs: true, endTs: true } }),
+        ]);
+        socket.emit('heat:sync', {
+          heatId,
+          tapes: serializeTapes(tapes),
+          startTs: heatRow?.startTs?.getTime() ?? null,
+          endTs: heatRow?.endTs?.getTime() ?? null,
         });
-        socket.emit('heat:sync', { heatId, tapes: serializeTapes(tapes) });
       } catch { /* ignore */ }
     });
 

@@ -5,11 +5,15 @@ import Layout from '../components/Layout.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { getRaceDay } from '../api/raceDays.js';
 import type { RaceDayData } from '../api/raceDays.js';
-import { createRace } from '../api/races.js';
+import { createRace, deleteRace, updateRace } from '../api/races.js';
 import type { RaceData } from '../api/races.js';
 import { listDistances, listClassifications } from '../api/divisionConfig.js';
 import type { DistanceData, ClassificationData } from '../api/divisionConfig.js';
+import { listTemplates } from '../api/raceDayTemplates.js';
+import type { RaceDayTemplateData } from '../api/raceDayTemplates.js';
 import { ApiError } from '../api/client.js';
+import { getLineupStatus } from '../api/lineups.js';
+import type { LineupStatus } from '../api/lineups.js';
 
 const STATUS_COLORS: Record<string, string> = {
   setup: 'bg-gray-100 text-gray-600',
@@ -28,6 +32,109 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+type AdvancementRuleType = 'none' | 'top_n_per_heat_plus_fastest' | 'top_overall';
+
+interface AdvancementRuleFormProps {
+  ruleType: AdvancementRuleType;
+  topNPerHeat: string;
+  additionalFastest: string;
+  topOverallCount: string;
+  onRuleTypeChange: (t: AdvancementRuleType) => void;
+  onTopNPerHeatChange: (v: string) => void;
+  onAdditionalFastestChange: (v: string) => void;
+  onTopOverallCountChange: (v: string) => void;
+}
+
+function AdvancementRuleForm({
+  ruleType,
+  topNPerHeat,
+  additionalFastest,
+  topOverallCount,
+  onRuleTypeChange,
+  onTopNPerHeatChange,
+  onAdditionalFastestChange,
+  onTopOverallCountChange,
+}: AdvancementRuleFormProps) {
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-gray-700">Advancement Rule</label>
+      <select
+        value={ruleType}
+        onChange={(e) => onRuleTypeChange(e.target.value as AdvancementRuleType)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
+      >
+        <option value="none">None (no finals)</option>
+        <option value="top_n_per_heat_plus_fastest">Top N per heat + fastest</option>
+        <option value="top_overall">Top overall</option>
+      </select>
+
+      {ruleType === 'top_n_per_heat_plus_fastest' && (
+        <div className="grid grid-cols-2 gap-3 pl-3 border-l-2 border-blue-200">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Top N per heat</label>
+            <input
+              type="number"
+              min="1"
+              value={topNPerHeat}
+              onChange={(e) => onTopNPerHeatChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-10"
+              placeholder="e.g. 2"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Additional fastest</label>
+            <input
+              type="number"
+              min="0"
+              value={additionalFastest}
+              onChange={(e) => onAdditionalFastestChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-10"
+              placeholder="e.g. 2"
+            />
+          </div>
+        </div>
+      )}
+
+      {ruleType === 'top_overall' && (
+        <div className="pl-3 border-l-2 border-blue-200">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Advance top N total</label>
+          <input
+            type="number"
+            min="1"
+            value={topOverallCount}
+            onChange={(e) => onTopOverallCountChange(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-10"
+            placeholder="e.g. 8"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildAdvancementRule(
+  ruleType: AdvancementRuleType,
+  topNPerHeat: string,
+  additionalFastest: string,
+  topOverallCount: string
+): Record<string, unknown> | undefined {
+  if (ruleType === 'none') return undefined;
+  if (ruleType === 'top_n_per_heat_plus_fastest') {
+    return {
+      type: 'top_n_per_heat_plus_fastest',
+      top_n_per_heat: parseInt(topNPerHeat, 10) || 2,
+      additional_fastest: parseInt(additionalFastest, 10) || 0,
+    };
+  }
+  if (ruleType === 'top_overall') {
+    return {
+      type: 'top_overall',
+      count: parseInt(topOverallCount, 10) || 8,
+    };
+  }
+  return undefined;
+}
+
 export default function RaceDayDetail() {
   const { raceDayId } = useParams<{ raceDayId: string }>();
   const { memberships } = useAuthContext();
@@ -39,23 +146,28 @@ export default function RaceDayDetail() {
   const [laneCount, setLaneCount] = useState('8');
   const [orderIndex, setOrderIndex] = useState('0');
   const [hasFinals, setHasFinals] = useState(true);
-  const [advancementRuleJson, setAdvancementRuleJson] = useState('');
+  const [ruleType, setRuleType] = useState<AdvancementRuleType>('none');
+  const [topNPerHeat, setTopNPerHeat] = useState('2');
+  const [additionalFastest, setAdditionalFastest] = useState('0');
+  const [topOverallCount, setTopOverallCount] = useState('8');
   const [formError, setFormError] = useState('');
 
-  // Find the user's divisionId from memberships (coordinator or any division membership)
+  // Template application state
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateApplyError, setTemplateApplyError] = useState('');
+  const [templateApplying, setTemplateApplying] = useState(false);
+
   const divisionId =
     memberships.find((m) => m.role === 'coordinator')?.divisionId ??
     memberships.find((m) => m.divisionId)?.divisionId ??
     memberships.find((m) => m.team?.id)?.division?.id;
 
-  // Fetch raceDay + races using divisionId
   const raceDayQuery = useQuery<{ raceDay: RaceDayData }, ApiError>({
     queryKey: ['raceDayWithDiv', raceDayId, divisionId],
     queryFn: () => getRaceDay(divisionId!, raceDayId!),
     enabled: !!raceDayId && !!divisionId,
   });
 
-  // Also fetch races directly (doesn't need divisionId in this form)
   const racesDirectQuery = useQuery<{ races: RaceData[] }, ApiError>({
     queryKey: ['racesDirect', raceDayId],
     queryFn: async () => {
@@ -77,6 +189,16 @@ export default function RaceDayDetail() {
   const isCoordinator = memberships.some(
     (m) => m.role === 'coordinator' && (!effectiveDivisionId || m.divisionId === effectiveDivisionId)
   );
+  const isHeadCoach = memberships.some((m) => m.role === 'head_coach');
+
+  const lineupStatusQuery = useQuery<{ statuses: LineupStatus[] }, ApiError>({
+    queryKey: ['lineupStatus', raceDayId],
+    queryFn: () => getLineupStatus(raceDayId!),
+    enabled: !!raceDayId && isHeadCoach,
+  });
+  const lineupStatusMap = new Map(
+    (lineupStatusQuery.data?.statuses ?? []).map((s) => [s.raceId, s])
+  );
 
   const distancesQuery = useQuery<{ distances: DistanceData[] }, ApiError>({
     queryKey: ['distances', effectiveDivisionId],
@@ -90,6 +212,12 @@ export default function RaceDayDetail() {
     enabled: !!effectiveDivisionId && showAddRace,
   });
 
+  const templatesQuery = useQuery<{ templates: RaceDayTemplateData[] }, ApiError>({
+    queryKey: ['templates', effectiveDivisionId],
+    queryFn: () => listTemplates(effectiveDivisionId!),
+    enabled: !!effectiveDivisionId && isCoordinator,
+  });
+
   const createRaceMutation = useMutation({
     mutationFn: (data: Parameters<typeof createRace>[1]) => createRace(raceDayId!, data),
     onSuccess: () => {
@@ -101,34 +229,77 @@ export default function RaceDayDetail() {
       setLaneCount('8');
       setOrderIndex('0');
       setHasFinals(true);
-      setAdvancementRuleJson('');
+      setRuleType('none');
+      setTopNPerHeat('2');
+      setAdditionalFastest('0');
+      setTopOverallCount('8');
       setFormError('');
     },
     onError: (err: ApiError) => setFormError(err.message),
   });
 
+  const deleteRaceMutation = useMutation({
+    mutationFn: (raceId: string) => deleteRace(raceDayId!, raceId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['racesDirect', raceDayId] });
+      void queryClient.invalidateQueries({ queryKey: ['raceDayWithDiv'] });
+    },
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: async ({ raceId, swapId, raceOrder, swapOrder }: { raceId: string; swapId: string; raceOrder: number; swapOrder: number }) => {
+      await Promise.all([
+        updateRace(raceDayId!, raceId, { order_index: swapOrder }),
+        updateRace(raceDayId!, swapId, { order_index: raceOrder }),
+      ]);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['racesDirect', raceDayId] });
+    },
+  });
+
   const handleAddRace = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    if (!classificationId || !distanceId) {
-      setFormError('Classification and distance are required'); return;
+    if (!distanceId) {
+      setFormError('Distance is required'); return;
     }
-    let advancementRule: Record<string, unknown> | undefined;
-    if (advancementRuleJson.trim()) {
-      try {
-        advancementRule = JSON.parse(advancementRuleJson) as Record<string, unknown>;
-      } catch {
-        setFormError('Advancement rule must be valid JSON'); return;
-      }
-    }
+    const advancementRule = buildAdvancementRule(ruleType, topNPerHeat, additionalFastest, topOverallCount);
     createRaceMutation.mutate({
-      classification_id: classificationId,
+      classification_id: classificationId || undefined,
       distance_id: distanceId,
       lane_count: parseInt(laneCount, 10) || 8,
       order_index: parseInt(orderIndex, 10) || 0,
       has_finals: hasFinals,
       advancement_rule: advancementRule,
     });
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!selectedTemplateId) return;
+    const template = templatesQuery.data?.templates.find((t) => t.id === selectedTemplateId);
+    if (!template) return;
+    setTemplateApplying(true);
+    setTemplateApplyError('');
+    try {
+      for (const tr of template.races) {
+        if (!tr.distance?.id) continue;
+        await createRace(raceDayId!, {
+          classification_id: tr.classification?.id || undefined,
+          distance_id: tr.distance.id,
+          lane_count: tr.laneCount,
+          order_index: tr.orderIndex,
+          has_finals: tr.hasFinals,
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ['racesDirect', raceDayId] });
+      void queryClient.invalidateQueries({ queryKey: ['raceDayWithDiv'] });
+      setSelectedTemplateId('');
+    } catch (err) {
+      setTemplateApplyError(err instanceof ApiError ? err.message : 'Failed to apply template');
+    } finally {
+      setTemplateApplying(false);
+    }
   };
 
   const isLoading = raceDayQuery.isLoading || racesDirectQuery.isLoading;
@@ -155,9 +326,22 @@ export default function RaceDayDetail() {
               ← Race Days
             </Link>
           )}
-          <h1 className="text-2xl font-bold text-gray-900 mt-1">
-            {raceDay?.name ?? 'Race Day'}
-          </h1>
+          <div className="flex items-start justify-between gap-3 mt-1">
+            <h1 className="text-2xl font-bold text-gray-900">
+              {raceDay?.name ?? 'Race Day'}
+            </h1>
+            <a
+              href={`/p/${raceDayId ?? ''}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Public view
+            </a>
+          </div>
           {raceDay?.date && (
             <p className="text-sm text-gray-500">
               {new Date(raceDay.date).toLocaleDateString('en-US', {
@@ -213,31 +397,136 @@ export default function RaceDayDetail() {
             )}
           </div>
 
+          {/* Template application */}
+          {isCoordinator && (templatesQuery.data?.templates ?? []).length > 0 && races.length === 0 && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-medium text-indigo-800">Apply a template to create races:</p>
+              {templateApplyError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">
+                  {templateApplyError}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="flex-1 border border-indigo-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-11"
+                >
+                  <option value="">Select template…</option>
+                  {(templatesQuery.data?.templates ?? []).map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.races.length} races)</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => void handleApplyTemplate()}
+                  disabled={!selectedTemplateId || templateApplying}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors"
+                >
+                  {templateApplying ? 'Applying…' : 'Apply'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {races.length === 0 ? (
             <p className="text-gray-500 text-sm">No races scheduled.</p>
           ) : (
             <ul className="space-y-2">
-              {races.map((race) => (
-                <li key={race.id}>
-                  <Link
-                    to={`/races/${race.id}`}
-                    className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition-colors min-h-11"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {race.classification?.label ?? '—'} · {race.distance?.label ?? '—'}
-                      </p>
-                      <p className="text-xs text-gray-500">{race.laneCount} lanes</p>
+              {races.map((race) => {
+                const isActive = race.status === 'seeded' || race.status === 'live';
+                const isSetup = race.status === 'setup';
+                return (
+                  <li key={race.id} className={`rounded-xl border overflow-hidden ${isActive ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className={`font-medium ${isActive ? 'text-green-900' : 'text-gray-900'}`}>
+                          {race.classification?.label ?? 'Open'} · {race.distance?.label ?? '—'}
+                        </p>
+                        <p className="text-xs text-gray-500">{race.laneCount} lanes</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <StatusBadge status={race.status} />
+                        {isHeadCoach && (race.status === 'setup' || race.status === 'boat_prep') && (() => {
+                          const ls = lineupStatusMap.get(race.id);
+                          if (ls?.submitted) {
+                            return <span className="text-xs font-medium bg-green-100 text-green-700 rounded-full px-2.5 py-1">Lineup ✓</span>;
+                          }
+                          if (ls?.exists) {
+                            return <span className="text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full px-2.5 py-1">Draft</span>;
+                          }
+                          return null;
+                        })()}
+                        {isActive ? (
+                          <Link
+                            to={`/races/${race.id}`}
+                            className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg px-3 py-2 text-sm min-h-11 transition-colors"
+                          >
+                            Go to Race →
+                          </Link>
+                        ) : isSetup ? (
+                          <Link
+                            to={`/races/${race.id}`}
+                            className="text-xs text-gray-500 hover:text-gray-700 underline px-2 min-h-11 flex items-center"
+                          >
+                            Set up
+                          </Link>
+                        ) : (
+                          <Link
+                            to={`/races/${race.id}`}
+                            className="flex items-center"
+                          >
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Link>
+                        )}
+                        {isCoordinator && (() => {
+                          const idx = races.indexOf(race);
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                onClick={() => {
+                                  const prev = races[idx - 1];
+                                  if (prev) reorderMutation.mutate({ raceId: race.id, swapId: prev.id, raceOrder: race.orderIndex, swapOrder: prev.orderIndex });
+                                }}
+                                disabled={idx === 0 || reorderMutation.isPending}
+                                className="text-gray-400 hover:text-gray-700 disabled:opacity-20 leading-none px-1"
+                                title="Move up"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const next = races[idx + 1];
+                                  if (next) reorderMutation.mutate({ raceId: race.id, swapId: next.id, raceOrder: race.orderIndex, swapOrder: next.orderIndex });
+                                }}
+                                disabled={idx === races.length - 1 || reorderMutation.isPending}
+                                className="text-gray-400 hover:text-gray-700 disabled:opacity-20 leading-none px-1"
+                                title="Move down"
+                              >
+                                ▼
+                              </button>
+                            </div>
+                          );
+                        })()}
+                        {isCoordinator && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Delete this race and all its data? This cannot be undone.')) {
+                                deleteRaceMutation.mutate(race.id);
+                              }
+                            }}
+                            disabled={deleteRaceMutation.isPending}
+                            className="text-xs text-red-500 hover:text-red-700 disabled:opacity-60 px-2 min-h-11 flex items-center"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={race.status} />
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </Link>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
@@ -253,14 +542,13 @@ export default function RaceDayDetail() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Classification *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Classification</label>
                 <select
                   value={classificationId}
                   onChange={(e) => setClassificationId(e.target.value)}
-                  required
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-11"
                 >
-                  <option value="">Select…</option>
+                  <option value="">Open (no classification)</option>
                   {(classificationsQuery.data?.classifications ?? []).map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
                   ))}
@@ -312,18 +600,18 @@ export default function RaceDayDetail() {
                 />
                 Has finals
               </label>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Advancement rule (JSON, optional)
-                </label>
-                <textarea
-                  value={advancementRuleJson}
-                  onChange={(e) => setAdvancementRuleJson(e.target.value)}
-                  placeholder='{"type":"top_n_per_heat","top_n":2}'
-                  rows={2}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              {hasFinals && (
+                <AdvancementRuleForm
+                  ruleType={ruleType}
+                  topNPerHeat={topNPerHeat}
+                  additionalFastest={additionalFastest}
+                  topOverallCount={topOverallCount}
+                  onRuleTypeChange={setRuleType}
+                  onTopNPerHeatChange={setTopNPerHeat}
+                  onAdditionalFastestChange={setAdditionalFastest}
+                  onTopOverallCountChange={setTopOverallCount}
                 />
-              </div>
+              )}
               <div className="flex gap-2">
                 <button
                   type="submit"

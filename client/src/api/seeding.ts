@@ -9,6 +9,7 @@ export interface LaneAssignmentData {
     pairId: string | null;
     athlete: { id: string; name: string; grade: string | null };
     lineup: { team: { id: string; name: string } };
+    boatAssignments: Array<{ boat: { number: string } }>;
   };
 }
 
@@ -17,6 +18,7 @@ export interface HeatData {
   raceId: string;
   heatNumber: number;
   startTs: string | null;
+  endTs: string | null;
   createdAt: string;
   laneAssignments: LaneAssignmentData[];
 }

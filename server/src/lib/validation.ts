@@ -19,6 +19,13 @@ export const LoginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const CreateLeagueSchema = z.object({
+  leagueName: z.string().min(1).max(100),
+  divisionName: z.string().min(1).max(100),
+});
+
+export type CreateLeagueInput = z.infer<typeof CreateLeagueSchema>;
+
 export const CreateDivisionSchema = z.object({
   name: z.string().min(1, 'Division name is required'),
   leagueId: z.string().min(1, 'League ID is required'),
@@ -51,11 +58,21 @@ export type UpdatePermissionsInput = z.infer<typeof UpdatePermissionsSchema>;
 export const CreateAthleteSchema = z.object({
   name: z.string().min(1),
   grade: z.string().optional(),
+  classificationId: z.string().cuid().optional(),
+  preferred_boat_model_id: z.string().optional(),
+  preferred_boat_number: z.string().optional(),
 });
 
 export const UpdateAthleteSchema = z.object({
   name: z.string().min(1).optional(),
   grade: z.string().optional(),
+  classificationId: z.string().cuid().optional(),
+  preferred_boat_model_id: z.string().optional().nullable(),
+  preferred_boat_number: z.string().optional().nullable(),
+});
+
+export const BulkCreateAthletesSchema = z.object({
+  athletes: z.array(CreateAthleteSchema).min(1).max(200),
 });
 
 export const UpsertBestTimeSchema = z.object({
@@ -65,13 +82,15 @@ export const UpsertBestTimeSchema = z.object({
 
 export const CreateBoatSchema = z.object({
   number: z.string().min(1),
-  model: z.string().optional(),
+  boat_model_id: z.string().optional(),
   is_double: z.boolean().default(false),
-  model_rank: z.number().int().default(0),
-  number_rank: z.number().int().default(0),
 });
 
 export const UpdateBoatSchema = CreateBoatSchema.partial();
+
+export const BulkCreateBoatsSchema = z.object({
+  boats: z.array(CreateBoatSchema).min(1).max(500),
+});
 
 export type CreateAthleteInput = z.infer<typeof CreateAthleteSchema>;
 export type UpdateAthleteInput = z.infer<typeof UpdateAthleteSchema>;
@@ -87,7 +106,7 @@ export const CreateRaceDaySchema = z.object({
 });
 
 export const CreateRaceSchema = z.object({
-  classification_id: z.string().min(1),
+  classification_id: z.string().min(1).optional(),
   distance_id: z.string().min(1),
   lane_count: z.number().int().min(1).max(20).default(8),
   order_index: z.number().int().min(0),
@@ -115,6 +134,10 @@ export const CreateClassificationSchema = z.object({
 export const AddLineupEntrySchema = z.object({
   athlete_id: z.string().min(1),
   pair_id: z.string().optional(),
+});
+
+export const BulkAddLineupEntriesSchema = z.object({
+  athlete_ids: z.array(z.string().min(1)).min(1, 'At least one athlete is required'),
 });
 
 export const RequestSubstitutionSchema = z.object({
@@ -170,7 +193,7 @@ export const SeedRaceSchema = z.object({
 export type SeedRaceInput = z.infer<typeof SeedRaceSchema>;
 
 export const RecordFinishEventSchema = z.object({
-  entry_id: z.string().min(1),
+  entry_id: z.string().min(1).optional(),  // null/omitted for timer-only mode
   client_finish_ts: z.number().int().positive(),  // epoch ms
   sequence: z.number().int().min(0),
 });

@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
 import Layout from '../components/Layout.js';
+import PageNav from '../components/PageNav.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { ApiError } from '../api/client.js';
 import { publishRace, getRaceResults, getRaceStandings } from '../api/publish.js';
@@ -89,16 +90,14 @@ export default function RaceResultsPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Link to={`/races/${raceId}`} className="text-blue-600 hover:text-blue-800 text-sm">
-            ← Race
-          </Link>
-        </div>
+        {/* Nav */}
+        <PageNav crumbs={[
+          { label: 'Race', to: `/races/${raceId ?? ''}` },
+        ]} />
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Race Results</h1>
-            <p className="text-sm text-gray-500 mt-1">Race ID: {raceId}</p>
           </div>
           {!isPublished && isOfficial && (
             <button
@@ -152,6 +151,7 @@ export default function RaceResultsPage() {
                             <th className="px-4 py-2 w-12">Place</th>
                             <th className="px-4 py-2">Athlete</th>
                             <th className="px-4 py-2">Team</th>
+                            <th className="px-4 py-2 w-16">Boat</th>
                             <th className="px-4 py-2 text-right">Time</th>
                             <th className="px-4 py-2">Status</th>
                           </tr>
@@ -162,6 +162,7 @@ export default function RaceResultsPage() {
                               <td className="px-4 py-2.5 font-semibold text-gray-700">{e.place ?? '—'}</td>
                               <td className="px-4 py-2.5 text-gray-800 font-medium">{e.athlete.name}</td>
                               <td className="px-4 py-2.5 text-gray-600">{e.team.name}</td>
+                              <td className="px-4 py-2.5 text-gray-600 font-mono">{e.boatNumber ? `#${e.boatNumber}` : '—'}</td>
                               <td className="px-4 py-2.5 text-right font-mono text-gray-700">{formatTime(e.timeMs)}</td>
                               <td className="px-4 py-2.5"><StatusBadge status={e.status} /></td>
                             </tr>
@@ -192,6 +193,7 @@ export default function RaceResultsPage() {
                           <th className="px-4 py-2 w-12">Place</th>
                           <th className="px-4 py-2">Athlete</th>
                           <th className="px-4 py-2">Team</th>
+                          <th className="px-4 py-2 w-16">Boat</th>
                           <th className="px-4 py-2 text-right">Time</th>
                           <th className="px-4 py-2">Status</th>
                           <th className="px-4 py-2">Source</th>
@@ -203,6 +205,7 @@ export default function RaceResultsPage() {
                             <td className="px-4 py-2.5 font-semibold text-gray-700">{s.place ?? '—'}</td>
                             <td className="px-4 py-2.5 text-gray-800 font-medium">{s.athleteName}</td>
                             <td className="px-4 py-2.5 text-gray-600">{s.teamName}</td>
+                            <td className="px-4 py-2.5 text-gray-600 font-mono">{s.boatNumber ? `#${s.boatNumber}` : '—'}</td>
                             <td className="px-4 py-2.5 text-right font-mono text-gray-700">{formatTime(s.timeMs)}</td>
                             <td className="px-4 py-2.5"><StatusBadge status={s.status} /></td>
                             <td className="px-4 py-2.5">

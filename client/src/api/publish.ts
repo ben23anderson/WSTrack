@@ -6,6 +6,7 @@ export interface HeatResultEntry {
   status: string;
   athlete: { id: string; name: string; grade?: string | null };
   team: { id: string; name: string };
+  boatNumber: string | null;
 }
 
 export interface HeatResultGroup {
@@ -18,6 +19,7 @@ export interface StandingEntry {
   entryId: string;
   athleteName: string;
   teamName: string;
+  boatNumber: string | null;
   timeMs: number | null;
   status: string;
   source: 'final' | 'heat';

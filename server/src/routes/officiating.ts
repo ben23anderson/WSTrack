@@ -8,8 +8,7 @@ import {
   LogDisagreeSchema,
   ManualResultSchema,
 } from '../lib/validation.js';
-import { reconcileTapes } from '../lib/reconciliation.js';
-import type { Tape } from '../lib/reconciliation.js';
+import { reconcileTapes, buildTapesForReconciliation } from '../lib/reconciliation.js';
 
 /** @private */
 async function getHeatRaceDay(
@@ -142,6 +141,48 @@ export function createOfficiatingRouter(io: SocketIOServer): Router {
     }
   });
 
+  // POST /api/heats/:heatId/end
+  router.post('/end', requireAuth, async (req, res): Promise<void> => {
+    const { heatId } = req.params;
+    const userId = req.session.userId!;
+    try {
+      const heatInfo = await getHeatRaceDay(heatId);
+      if (!heatInfo) {
+        res.status(404).json({ error: 'Heat not found' });
+        return;
+      }
+
+      if (!await isOfficialOrCoordinator(userId, heatInfo.raceDayId, heatInfo.divisionId)) {
+        res.status(403).json({ error: 'Forbidden: officials and coordinators only' });
+        return;
+      }
+
+      const existing = await db.heat.findUnique({
+        where: { id: heatId },
+        select: { startTs: true, endTs: true },
+      });
+      if (!existing?.startTs) {
+        res.status(409).json({ error: 'Heat has not started' });
+        return;
+      }
+      if (existing.endTs) {
+        res.status(409).json({ error: 'Heat already ended' });
+        return;
+      }
+
+      const heat = await db.heat.update({
+        where: { id: heatId },
+        data: { endTs: new Date() },
+      });
+
+      io.to(`heat:${heatId}`).emit('heat:ended', { heatId, endTs: heat.endTs!.getTime() });
+
+      res.json({ heat });
+    } catch {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   // GET /api/heats/:heatId/tapes
   router.get('/tapes', requireAuth, async (req, res): Promise<void> => {
     const { heatId } = req.params;
@@ -250,7 +291,7 @@ export function createOfficiatingRouter(io: SocketIOServer): Router {
       const event = await db.finishEvent.create({
         data: {
           tapeId: tape.id,
-          entryId: parsed.data.entry_id,
+          entryId: parsed.data.entry_id ?? null,
           clientFinishTs: BigInt(parsed.data.client_finish_ts),
           sequence: parsed.data.sequence,
         },
@@ -439,17 +480,17 @@ export function createOfficiatingRouter(io: SocketIOServer): Router {
         include: { finishEvents: { orderBy: { sequence: 'asc' } } },
       });
 
-      // Convert tapes to reconciliation format
-      const reconcileTapeInput: Tape[] = tapes.map((t) => ({
-        officialId: t.officialId,
-        events: t.finishEvents
-          .filter((e) => e.entryId !== null)
-          .map((e) => ({
-            entryId: e.entryId!,
+      // Convert tapes to reconciliation format (handles split timer/order tapes)
+      const reconcileTapeInput = buildTapesForReconciliation(
+        tapes.map((t) => ({
+          officialId: t.officialId,
+          events: t.finishEvents.map((e) => ({
+            entryId: e.entryId,
             timeMsFromStart: Number(e.clientFinishTs) - startTs.getTime(),
             sequence: e.sequence,
           })),
-      }));
+        }))
+      );
 
       // Load DNS/DQ results
       const dnsDqResults = await db.result.findMany({

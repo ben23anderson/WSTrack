@@ -20,6 +20,13 @@ import LiveViewPage from './pages/LiveViewPage.js';
 import ReviewPage from './pages/ReviewPage.js';
 import RaceResultsPage from './pages/RaceResultsPage.js';
 import FinalsPage from './pages/FinalsPage.js';
+import CreateLeaguePage from './pages/CreateLeaguePage.js';
+import TeamsPage from './pages/TeamsPage.js';
+import PublicRaceDayPage from './pages/PublicRaceDayPage.js';
+import AdminPage from './pages/AdminPage.js';
+import VerifyEmail from './pages/VerifyEmail.js';
+import ForgotPassword from './pages/ForgotPassword.js';
+import ResetPassword from './pages/ResetPassword.js';
 
 export default function App() {
   return (
@@ -73,6 +80,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <RaceDaysPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/divisions/:divisionId/teams"
+          element={
+            <ProtectedRoute>
+              <TeamsPage />
             </ProtectedRoute>
           }
         />
@@ -153,6 +168,26 @@ export default function App() {
           element={
             <ProtectedRoute>
               <FinalsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leagues/new"
+          element={
+            <ProtectedRoute>
+              <CreateLeaguePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/p/:raceDayId" element={<PublicRaceDayPage />} />
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPage />
             </ProtectedRoute>
           }
         />

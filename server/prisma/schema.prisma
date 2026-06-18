@@ -1,7 +1,6 @@
-// To use SQLite instead of PostgreSQL, change provider to "sqlite"
-// and update DATABASE_URL to "file:./dev.db"
+// To use SQLite, change provider to "sqlite" and DATABASE_URL to "file:./dev.db"
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,7 +11,7 @@ generator client {
 // ─── Core config ───────────────────────────────────────────────────────────────
 
 model League {
-  id        String    @id @default(cuid())
+  id        String    @id @default(cuid()) @db.VarChar(30)
   name      String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -23,8 +22,8 @@ model League {
 }
 
 model Division {
-  id        String    @id @default(cuid())
-  leagueId  String
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  leagueId  String    @db.VarChar(30)
   name      String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -37,29 +36,45 @@ model Division {
   distances       Distance[]
   classifications Classification[]
   invites         Invite[]
+  boatModels      BoatModel[]
+  raceDayTemplates RaceDayTemplate[]
 }
 
 // ─── Auth / users ──────────────────────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  name         String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id                String    @id @default(cuid()) @db.VarChar(30)
+  email             String    @unique @db.VarChar(191)
+  passwordHash      String
+  name              String
+  emailVerified     Boolean   @default(false)
+  verificationToken String?   @unique @db.VarChar(100)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
 
-  leagues          UserLeague[]
-  memberships      Membership[]
-  officialTapes    OfficialTape[]
-  primaryRaceDays  RaceDay[]         @relation("PrimaryOfficial")
-  raceDayOfficials RaceDayOfficial[]
+  leagues             UserLeague[]
+  memberships         Membership[]
+  officialTapes       OfficialTape[]
+  primaryRaceDays     RaceDay[]           @relation("PrimaryOfficial")
+  raceDayOfficials    RaceDayOfficial[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  userId    String    @db.VarChar(30)
+  token     String    @unique @db.VarChar(100)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model UserLeague {
-  userId   String
-  leagueId String
+  userId   String @db.VarChar(30)
+  leagueId String @db.VarChar(30)
 
   user   User   @relation(fields: [userId], references: [id])
   league League @relation(fields: [leagueId], references: [id])
@@ -70,11 +85,11 @@ model UserLeague {
 // role: 'coordinator' | 'head_coach' | 'assistant_coach' | 'official'
 // permissions (assistant_coach only): { roster: bool, boat_inventory: bool, boat_assignments: bool }
 model Membership {
-  id          String    @id @default(cuid())
-  userId      String
-  role        String
-  teamId      String?
-  divisionId  String?
+  id          String    @id @default(cuid()) @db.VarChar(30)
+  userId      String    @db.VarChar(30)
+  role        String    @db.VarChar(50)
+  teamId      String?   @db.VarChar(30)
+  divisionId  String?   @db.VarChar(30)
   permissions Json?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -89,8 +104,8 @@ model Membership {
 // ─── Config tables (never hard-coded enums) ────────────────────────────────────
 
 model Distance {
-  id         String   @id @default(cuid())
-  divisionId String
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  divisionId String   @db.VarChar(30)
   label      String   // e.g. "2K", "250M Sprint"
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
@@ -98,25 +113,28 @@ model Distance {
   division         Division          @relation(fields: [divisionId], references: [id])
   races            Race[]
   athleteBestTimes AthleteBestTime[]
+  templateRaces    RaceDayTemplateRace[]
 }
 
 model Classification {
-  id         String   @id @default(cuid())
-  divisionId String
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  divisionId String   @db.VarChar(30)
   label      String   // e.g. "JV Boys", "Varsity Girls", "Open Doubles"
   isDoubles  Boolean  @default(false)
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
 
-  division Division @relation(fields: [divisionId], references: [id])
+  division Division  @relation(fields: [divisionId], references: [id])
   races    Race[]
+  athletes Athlete[]
+  templateRaces RaceDayTemplateRace[]
 }
 
 // ─── Teams / athletes / boats ──────────────────────────────────────────────────
 
 model Team {
-  id         String    @id @default(cuid())
-  divisionId String
+  id         String    @id @default(cuid()) @db.VarChar(30)
+  divisionId String    @db.VarChar(30)
   name       String
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -136,27 +154,32 @@ model Team {
 }
 
 model Athlete {
-  id        String    @id @default(cuid())
-  teamId    String
-  name      String
-  grade     String?
-  photoUrl  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id                    String    @id @default(cuid()) @db.VarChar(30)
+  teamId                String    @db.VarChar(30)
+  name                  String
+  grade                 String?
+  photoUrl              String?
+  classificationId      String?   @db.VarChar(30)
+  preferredBoatModelId  String?   @db.VarChar(30)
+  preferredBoatModel    BoatModel? @relation("AthletePreferredModel", fields: [preferredBoatModelId], references: [id])
+  preferredBoatNumber   String?   @db.VarChar(20)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
 
-  team          Team              @relation(fields: [teamId], references: [id])
-  bestTimes     AthleteBestTime[]
-  lineupEntries LineupEntry[]
-  subOut        Substitution[]    @relation("SubOut")
-  subIn         Substitution[]    @relation("SubIn")
-  scratches     Scratch[]
+  team           Team              @relation(fields: [teamId], references: [id])
+  classification Classification?   @relation(fields: [classificationId], references: [id])
+  bestTimes      AthleteBestTime[]
+  lineupEntries  LineupEntry[]
+  subOut         Substitution[]    @relation("SubOut")
+  subIn          Substitution[]    @relation("SubIn")
+  scratches      Scratch[]
 }
 
 model AthleteBestTime {
-  id         String   @id @default(cuid())
-  athleteId  String
-  distanceId String
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  athleteId  String   @db.VarChar(30)
+  distanceId String   @db.VarChar(30)
   timeMs     Int
   isOfficial Boolean  @default(true)
   recordedAt DateTime @default(now())
@@ -167,31 +190,30 @@ model AthleteBestTime {
   @@unique([athleteId, distanceId])
 }
 
-// Boats sort by (modelRank, numberRank)
 model Boat {
-  id         String    @id @default(cuid())
-  teamId     String
-  number     String
-  model      String?
-  isDouble   Boolean   @default(false)
-  modelRank  Int       @default(0)
-  numberRank Int       @default(0)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
+  id           String    @id @default(cuid()) @db.VarChar(30)
+  teamId       String    @db.VarChar(30)
+  number       String
+  boatModelId  String?   @db.VarChar(30)
+  boatModel    BoatModel? @relation("BoatToModel", fields: [boatModelId], references: [id])
+  isDouble     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
   team            Team             @relation(fields: [teamId], references: [id])
   boatAssignments BoatAssignment[]
   loansAsBoat     BoatLoan[]
   raceDayBoats    RaceDayBoat[]
+  proposedSubs    Substitution[]   @relation("ProposedBoat")
 }
 
 model BoatLoan {
-  id         String   @id @default(cuid())
-  boatId     String
-  fromTeamId String
-  toTeamId   String
-  raceId     String
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  boatId     String   @db.VarChar(30)
+  fromTeamId String   @db.VarChar(30)
+  toTeamId   String   @db.VarChar(30)
+  raceId     String   @db.VarChar(30)
   createdAt  DateTime @default(now())
 
   boat     Boat   @relation(fields: [boatId], references: [id])
@@ -205,11 +227,11 @@ model BoatLoan {
 // ─── Race days / races ─────────────────────────────────────────────────────────
 
 model RaceDay {
-  id                String    @id @default(cuid())
-  divisionId        String
+  id                String    @id @default(cuid()) @db.VarChar(30)
+  divisionId        String    @db.VarChar(30)
   name              String
   date              DateTime  @db.Date
-  primaryOfficialId String?
+  primaryOfficialId String?   @db.VarChar(30)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
@@ -222,8 +244,8 @@ model RaceDay {
 }
 
 model RaceDayOfficial {
-  raceDayId String
-  userId    String
+  raceDayId String @db.VarChar(30)
+  userId    String @db.VarChar(30)
 
   raceDay RaceDay @relation(fields: [raceDayId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
@@ -234,22 +256,22 @@ model RaceDayOfficial {
 // status: setup | boat_prep | seeded | live | review | published
 // advancementRule JSON e.g. { type: "top_n_per_heat_plus_fastest", top_n_per_heat: 2, additional_fastest: 2 }
 model Race {
-  id               String    @id @default(cuid())
-  raceDayId        String
-  classificationId String
-  distanceId       String
+  id               String    @id @default(cuid()) @db.VarChar(30)
+  raceDayId        String    @db.VarChar(30)
+  classificationId String?   @db.VarChar(30)
+  distanceId       String    @db.VarChar(30)
   laneCount        Int       @default(8)
   orderIndex       Int
   hasFinals        Boolean   @default(true)
   finalBEnabled    Boolean   @default(false)
   advancementRule  Json?
   finalBRule       Json?
-  status           String    @default("setup")
+  status           String    @default("setup") @db.VarChar(20)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   raceDay         RaceDay          @relation(fields: [raceDayId], references: [id])
-  classification  Classification   @relation(fields: [classificationId], references: [id])
+  classification  Classification?  @relation(fields: [classificationId], references: [id])
   distance        Distance         @relation(fields: [distanceId], references: [id])
   lineups         Lineup[]
   boatAssignments BoatAssignment[]
@@ -263,9 +285,9 @@ model Race {
 // ─── Lineups / entries ─────────────────────────────────────────────────────────
 
 model Lineup {
-  id        String   @id @default(cuid())
-  teamId    String
-  raceId    String
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  teamId    String   @db.VarChar(30)
+  raceId    String   @db.VarChar(30)
   submitted Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -279,10 +301,10 @@ model Lineup {
 
 // pairId links two LineupEntry rows that form a doubles pair
 model LineupEntry {
-  id        String  @id @default(cuid())
-  lineupId  String
-  athleteId String
-  pairId    String?
+  id        String  @id @default(cuid()) @db.VarChar(30)
+  lineupId  String  @db.VarChar(30)
+  athleteId String  @db.VarChar(30)
+  pairId    String? @db.VarChar(30)
 
   lineup  Lineup  @relation(fields: [lineupId], references: [id])
   athlete Athlete @relation(fields: [athleteId], references: [id])
@@ -295,14 +317,16 @@ model LineupEntry {
 
 // status: pending | approved | rejected
 model Substitution {
-  id           String   @id @default(cuid())
-  raceId       String
-  teamId       String
-  outAthleteId String
-  inAthleteId  String
-  status       String   @default("pending")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid()) @db.VarChar(30)
+  raceId         String   @db.VarChar(30)
+  teamId         String   @db.VarChar(30)
+  outAthleteId   String   @db.VarChar(30)
+  inAthleteId    String   @db.VarChar(30)
+  status         String   @default("pending") @db.VarChar(20)
+  proposedBoatId String?  @db.VarChar(30)
+  proposedBoat   Boat?    @relation("ProposedBoat", fields: [proposedBoatId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   race       Race    @relation(fields: [raceId], references: [id])
   team       Team    @relation(fields: [teamId], references: [id])
@@ -311,10 +335,10 @@ model Substitution {
 }
 
 model Scratch {
-  id        String   @id @default(cuid())
-  raceId    String
-  teamId    String
-  athleteId String
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  raceId    String   @db.VarChar(30)
+  teamId    String   @db.VarChar(30)
+  athleteId String   @db.VarChar(30)
   createdAt DateTime @default(now())
 
   race    Race    @relation(fields: [raceId], references: [id])
@@ -327,10 +351,10 @@ model Scratch {
 // ─── Boat assignments ──────────────────────────────────────────────────────────
 
 model BoatAssignment {
-  id                String   @id @default(cuid())
-  raceId            String
-  entryId           String
-  boatId            String
+  id                String   @id @default(cuid()) @db.VarChar(30)
+  raceId            String   @db.VarChar(30)
+  entryId           String   @db.VarChar(30)
+  boatId            String   @db.VarChar(30)
   isFinalAssignment Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -345,10 +369,11 @@ model BoatAssignment {
 // ─── Heats / finals / lanes ────────────────────────────────────────────────────
 
 model Heat {
-  id         String    @id @default(cuid())
-  raceId     String
+  id         String    @id @default(cuid()) @db.VarChar(30)
+  raceId     String    @db.VarChar(30)
   heatNumber Int
   startTs    DateTime?
+  endTs      DateTime?
   createdAt  DateTime  @default(now())
 
   race            Race             @relation(fields: [raceId], references: [id])
@@ -360,9 +385,9 @@ model Heat {
 }
 
 model Final {
-  id        String    @id @default(cuid())
-  raceId    String
-  type      String    // 'A' | 'B'
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  raceId    String    @db.VarChar(30)
+  type      String    @db.VarChar(5) // 'A' | 'B'
   startTs   DateTime?
   createdAt DateTime  @default(now())
 
@@ -375,11 +400,11 @@ model Final {
 }
 
 model LaneAssignment {
-  id      String  @id @default(cuid())
-  heatId  String?
-  finalId String?
+  id      String  @id @default(cuid()) @db.VarChar(30)
+  heatId  String? @db.VarChar(30)
+  finalId String? @db.VarChar(30)
   lane    Int
-  entryId String
+  entryId String  @db.VarChar(30)
 
   heat  Heat?       @relation(fields: [heatId], references: [id])
   final Final?      @relation(fields: [finalId], references: [id])
@@ -389,10 +414,10 @@ model LaneAssignment {
 // ─── Live officiating ──────────────────────────────────────────────────────────
 
 model OfficialTape {
-  id         String   @id @default(cuid())
-  officialId String
-  heatId     String?
-  finalId    String?
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  officialId String   @db.VarChar(30)
+  heatId     String?  @db.VarChar(30)
+  finalId    String?  @db.VarChar(30)
   createdAt  DateTime @default(now())
 
   official     User          @relation(fields: [officialId], references: [id])
@@ -402,24 +427,24 @@ model OfficialTape {
 }
 
 model FinishEvent {
-  id               String   @id @default(cuid())
-  tapeId           String
-  entryId          String?
+  id               String   @id @default(cuid()) @db.VarChar(30)
+  tapeId           String   @db.VarChar(30)
+  entryId          String?  @db.VarChar(30)
   boatNumber       String?
   clientFinishTs   BigInt
   serverReceivedTs DateTime @default(now())
   sequence         Int
   createdAt        DateTime @default(now())
 
-  tape           OfficialTape  @relation(fields: [tapeId], references: [id])
-  entry          LineupEntry?  @relation(fields: [entryId], references: [id])
+  tape           OfficialTape    @relation(fields: [tapeId], references: [id])
+  entry          LineupEntry?    @relation(fields: [entryId], references: [id])
   disagreeEvents DisagreeEvent[]
 }
 
 model DisagreeEvent {
-  id            String   @id @default(cuid())
-  finishEventId String
-  officialId    String
+  id            String   @id @default(cuid()) @db.VarChar(30)
+  finishEventId String   @db.VarChar(30)
+  officialId    String   @db.VarChar(30)
   reason        String?
   createdAt     DateTime @default(now())
 
@@ -431,13 +456,13 @@ model DisagreeEvent {
 // status: ok | dns | dnf | dq
 // isFinal: true when this is the official season-standing result (from finals)
 model Result {
-  id        String   @id @default(cuid())
-  entryId   String
-  heatId    String?
-  finalId   String?
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  entryId   String   @db.VarChar(30)
+  heatId    String?  @db.VarChar(30)
+  finalId   String?  @db.VarChar(30)
   place     Int?
   timeMs    Int?
-  status    String   @default("ok")
+  status    String   @default("ok") @db.VarChar(20)
   isFinal   Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -450,16 +475,16 @@ model Result {
 // ─── Invites ───────────────────────────────────────────────────────────────────
 
 model Invite {
-  id         String    @id @default(cuid())
-  token      String    @unique @default(cuid())
-  email      String
-  role       String
-  teamId     String?
-  divisionId String?
+  id          String    @id @default(cuid()) @db.VarChar(30)
+  token       String    @unique @default(cuid()) @db.VarChar(30)
+  email       String    @db.VarChar(191)
+  role        String    @db.VarChar(50)
+  teamId      String?   @db.VarChar(30)
+  divisionId  String?   @db.VarChar(30)
   permissions Json?
-  expiresAt  DateTime
-  acceptedAt DateTime?
-  createdAt  DateTime  @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
 
   team     Team?     @relation(fields: [teamId], references: [id])
   division Division? @relation(fields: [divisionId], references: [id])
@@ -467,13 +492,50 @@ model Invite {
 
 // Tracks which boats a team is bringing to a race day
 model RaceDayBoat {
-  raceDayId String
-  boatId    String
-  teamId    String
+  raceDayId String @db.VarChar(30)
+  boatId    String @db.VarChar(30)
+  teamId    String @db.VarChar(30)
 
   raceDay RaceDay @relation(fields: [raceDayId], references: [id])
   boat    Boat    @relation(fields: [boatId], references: [id])
   team    Team    @relation(fields: [teamId], references: [id])
 
   @@id([raceDayId, boatId])
+}
+
+model BoatModel {
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  divisionId String   @db.VarChar(30)
+  brand      String   @db.VarChar(50)
+  name       String   @db.VarChar(50)
+  createdAt  DateTime @default(now())
+
+  division Division  @relation(fields: [divisionId], references: [id])
+  boats    Boat[]    @relation("BoatToModel")
+  athletes Athlete[] @relation("AthletePreferredModel")
+}
+
+model RaceDayTemplate {
+  id         String                @id @default(cuid()) @db.VarChar(30)
+  divisionId String                @db.VarChar(30)
+  name       String                @db.VarChar(100)
+  createdAt  DateTime              @default(now())
+
+  division Division               @relation(fields: [divisionId], references: [id])
+  races    RaceDayTemplateRace[]
+}
+
+model RaceDayTemplateRace {
+  id               String  @id @default(cuid()) @db.VarChar(30)
+  templateId       String  @db.VarChar(30)
+  name             String  @db.VarChar(100)
+  classificationId String? @db.VarChar(30)
+  distanceId       String? @db.VarChar(30)
+  laneCount        Int     @default(8)
+  hasFinals        Boolean @default(true)
+  orderIndex       Int     @default(0)
+
+  template       RaceDayTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  classification Classification? @relation(fields: [classificationId], references: [id])
+  distance       Distance?       @relation(fields: [distanceId], references: [id])
 }

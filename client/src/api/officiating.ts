@@ -4,6 +4,10 @@ export function startHeat(heatId: string) {
   return apiFetch<{ heat: unknown }>(`/heats/${heatId}/start`, { method: 'POST' });
 }
 
+export function endHeat(heatId: string) {
+  return apiFetch<{ heat: unknown }>(`/heats/${heatId}/end`, { method: 'POST' });
+}
+
 export function getOrCreateTape(heatId: string) {
   return apiFetch<{ tape: unknown }>(`/heats/${heatId}/tapes`, { method: 'POST' });
 }
@@ -14,7 +18,7 @@ export function getTapes(heatId: string) {
 
 export function recordFinish(
   heatId: string,
-  data: { entry_id: string; client_finish_ts: number; sequence: number }
+  data: { entry_id?: string; client_finish_ts: number; sequence: number }
 ) {
   return apiFetch<{ event: unknown }>(`/heats/${heatId}/finish-events`, {
     method: 'POST',

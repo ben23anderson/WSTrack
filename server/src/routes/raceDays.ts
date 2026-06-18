@@ -176,4 +176,22 @@ router.patch(
   }
 );
 
+// DELETE /api/divisions/:divisionId/race-days/:raceDayId
+router.delete(
+  '/:raceDayId',
+  requireAuth,
+  requireCoordinator('divisionId'),
+  async (req, res): Promise<void> => {
+    const { divisionId, raceDayId } = req.params;
+    try {
+      const existing = await db.raceDay.findFirst({ where: { id: raceDayId, divisionId, deletedAt: null } });
+      if (!existing) { res.status(404).json({ error: 'Race day not found' }); return; }
+      await db.raceDay.update({ where: { id: raceDayId }, data: { deletedAt: new Date() } });
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 export default router;

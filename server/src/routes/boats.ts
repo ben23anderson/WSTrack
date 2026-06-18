@@ -1,45 +1,19 @@
 import { Router } from 'express';
 import db from '../lib/db.js';
-import { requireBoatInventoryAccess } from '../middleware/requireAuth.js';
-import { CreateBoatSchema, UpdateBoatSchema } from '../lib/validation.js';
-import type { Request, Response, NextFunction } from 'express';
-
-/** Checks for any Membership with userId = session.userId AND teamId = req.params[teamIdParam]. */
-function requireTeamMember(
-  teamIdParam: string
-): (req: Request, res: Response, next: NextFunction) => void {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.session.userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-    const teamId = req.params[teamIdParam];
-    try {
-      const membership = await db.membership.findFirst({
-        where: { userId: req.session.userId, teamId },
-      });
-      if (!membership) {
-        res.status(403).json({ error: 'Forbidden' });
-        return;
-      }
-      req.membership = membership;
-      next();
-    } catch {
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  };
-}
+import { requireBoatInventoryAccess, requireBoatRead } from '../middleware/requireAuth.js';
+import { CreateBoatSchema, UpdateBoatSchema, BulkCreateBoatsSchema } from '../lib/validation.js';
 
 export function createBoatsRouter(): Router {
   const router = Router({ mergeParams: true });
 
   // GET /api/teams/:teamId/boats
-  router.get('/', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/', requireBoatRead('teamId'), async (req, res): Promise<void> => {
     const { teamId } = req.params;
     try {
       const boats = await db.boat.findMany({
         where: { teamId, deletedAt: null },
-        orderBy: [{ modelRank: 'asc' }, { numberRank: 'asc' }],
+        include: { boatModel: true },
+        orderBy: [{ boatModelId: 'asc' }, { number: 'asc' }],
       });
       res.json({ boats });
     } catch {
@@ -60,11 +34,10 @@ export function createBoatsRouter(): Router {
         data: {
           teamId,
           number: parsed.data.number,
-          model: parsed.data.model,
+          boatModelId: parsed.data.boat_model_id ?? null,
           isDouble: parsed.data.is_double,
-          modelRank: parsed.data.model_rank,
-          numberRank: parsed.data.number_rank,
         },
+        include: { boatModel: true },
       });
       res.status(201).json({ boat });
     } catch {
@@ -73,11 +46,12 @@ export function createBoatsRouter(): Router {
   });
 
   // GET /api/teams/:teamId/boats/:boatId
-  router.get('/:boatId', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/:boatId', requireBoatRead('teamId'), async (req, res): Promise<void> => {
     const { teamId, boatId } = req.params;
     try {
       const boat = await db.boat.findFirst({
         where: { id: boatId, teamId, deletedAt: null },
+        include: { boatModel: true },
       });
       if (!boat) {
         res.status(404).json({ error: 'Boat not found' });
@@ -109,11 +83,10 @@ export function createBoatsRouter(): Router {
         where: { id: boatId },
         data: {
           ...(parsed.data.number !== undefined ? { number: parsed.data.number } : {}),
-          ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
+          ...(parsed.data.boat_model_id !== undefined ? { boatModelId: parsed.data.boat_model_id ?? null } : {}),
           ...(parsed.data.is_double !== undefined ? { isDouble: parsed.data.is_double } : {}),
-          ...(parsed.data.model_rank !== undefined ? { modelRank: parsed.data.model_rank } : {}),
-          ...(parsed.data.number_rank !== undefined ? { numberRank: parsed.data.number_rank } : {}),
         },
+        include: { boatModel: true },
       });
       res.json({ boat });
     } catch {
@@ -138,6 +111,30 @@ export function createBoatsRouter(): Router {
       });
       res.json({ ok: true });
     } catch {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // POST /api/teams/:teamId/boats/bulk
+  router.post('/bulk', requireBoatInventoryAccess('teamId'), async (req, res): Promise<void> => {
+    const { teamId } = req.params;
+    const parsed = BulkCreateBoatsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+      return;
+    }
+    try {
+      const created: unknown[] = [];
+      for (const b of parsed.data.boats) {
+        const boat = await db.boat.create({
+          data: { teamId, number: b.number, boatModelId: b.boat_model_id ?? null, isDouble: b.is_double },
+          include: { boatModel: true },
+        });
+        created.push(boat);
+      }
+      res.status(201).json({ boats: created, count: created.length });
+    } catch (err) {
+      console.error('[POST /boats/bulk]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });

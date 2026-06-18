@@ -7,7 +7,7 @@ export interface BoatLoanData {
   toTeamId: string;
   raceId: string;
   createdAt: string;
-  boat: { id: string; number: string; model: string | null };
+  boat: { id: string; number: string; boatModelId: string | null; boatModel: { id: string; brand: string; name: string } | null };
   fromTeam: { id: string; name: string };
   toTeam: { id: string; name: string };
 }

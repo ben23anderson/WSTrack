@@ -1,7 +1,11 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { sessionMiddleware } from './lib/sessionMiddleware.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
@@ -23,10 +27,16 @@ import boatAssignmentsRouter from './routes/boatAssignments.js';
 import boatLoansRouter from './routes/boatLoans.js';
 import seedingRouter from './routes/seeding.js';
 import finalsRouter from './routes/finals.js';
+import boatModelsRouter from './routes/boatModels.js';
+import raceDayTemplatesRouter from './routes/raceDayTemplates.js';
+import publicRouter from './routes/public.js';
+import leaguesRouter from './routes/leagues.js';
+import adminRouter from './routes/admin.js';
 
 export function createApp(): express.Application {
   const app = express();
 
+  app.set('trust proxy', 1);
   app.use(helmet());
   app.use(cors({
     origin: config.NODE_ENV === 'production' ? false : 'http://localhost:5173',
@@ -43,6 +53,7 @@ export function createApp(): express.Application {
 
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/leagues', leaguesRouter);
   app.use('/api/divisions', divisionsRouter);
   app.use('/api/teams', teamsRouter);
   app.use('/api/teams/:teamId', membershipsRouter);
@@ -61,6 +72,20 @@ export function createApp(): express.Application {
   app.use('/api/races/:raceId/boat-loans', boatLoansRouter);
   app.use('/api/races/:raceId', seedingRouter);
   app.use('/api/races/:raceId', finalsRouter);
+  app.use('/api/divisions/:divisionId/boat-models', boatModelsRouter);
+  app.use('/api/divisions/:divisionId/race-day-templates', raceDayTemplatesRouter);
+  app.use('/api/public', publicRouter);
+  app.use('/api/admin', adminRouter);
+
+  // In production, serve the built React client from server/public
+  if (config.NODE_ENV === 'production') {
+    const clientDist = path.resolve(__dirname, '../../client/dist');
+    app.use(express.static(clientDist));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) { next(); return; }
+      res.sendFile(path.join(clientDist, 'index.html'));
+    });
+  }
 
   return app;
 }

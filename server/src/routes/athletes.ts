@@ -3,11 +3,12 @@ import multer from 'multer';
 import sharp from 'sharp';
 import db from '../lib/db.js';
 import type { StorageProvider } from '../lib/storage/StorageProvider.js';
-import { requireAuth, requireRosterAccess } from '../middleware/requireAuth.js';
+import { requireAuth, requireRosterAccess, requireRosterRead } from '../middleware/requireAuth.js';
 import {
   CreateAthleteSchema,
   UpdateAthleteSchema,
   UpsertBestTimeSchema,
+  BulkCreateAthletesSchema,
 } from '../lib/validation.js';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -46,7 +47,7 @@ export function createAthletesRouter(storage: StorageProvider): Router {
   });
 
   // GET /api/teams/:teamId/athletes
-  router.get('/', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/', requireRosterRead('teamId'), async (req, res): Promise<void> => {
     const { teamId } = req.params;
     try {
       const athletes = await db.athlete.findMany({
@@ -55,11 +56,14 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
         orderBy: { name: 'asc' },
       });
       res.json({ athletes });
-    } catch {
+    } catch (err) {
+      console.error('[GET /athletes]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -78,21 +82,27 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           teamId,
           name: parsed.data.name,
           grade: parsed.data.grade,
+          ...(parsed.data.classificationId ? { classificationId: parsed.data.classificationId } : {}),
+          ...(parsed.data.preferred_boat_model_id ? { preferredBoatModelId: parsed.data.preferred_boat_model_id } : {}),
+          ...(parsed.data.preferred_boat_number ? { preferredBoatNumber: parsed.data.preferred_boat_number } : {}),
         },
         include: {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
       });
       res.status(201).json({ athlete });
-    } catch {
+    } catch (err) {
+      console.error('[POST /athletes]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
   // GET /api/teams/:teamId/athletes/:athleteId
-  router.get('/:athleteId', requireTeamMember('teamId'), async (req, res): Promise<void> => {
+  router.get('/:athleteId', requireRosterRead('teamId'), async (req, res): Promise<void> => {
     const { teamId, athleteId } = req.params;
     try {
       const athlete = await db.athlete.findFirst({
@@ -101,6 +111,8 @@ export function createAthletesRouter(storage: StorageProvider): Router {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
       });
       if (!athlete) {
@@ -108,7 +120,8 @@ export function createAthletesRouter(storage: StorageProvider): Router {
         return;
       }
       res.json({ athlete });
-    } catch {
+    } catch (err) {
+      console.error('[GET /athletes/:athleteId]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -134,15 +147,21 @@ export function createAthletesRouter(storage: StorageProvider): Router {
         data: {
           ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
           ...(parsed.data.grade !== undefined ? { grade: parsed.data.grade } : {}),
+          ...(parsed.data.classificationId !== undefined ? { classificationId: parsed.data.classificationId } : {}),
+          ...(parsed.data.preferred_boat_model_id !== undefined ? { preferredBoatModelId: parsed.data.preferred_boat_model_id ?? null } : {}),
+          ...(parsed.data.preferred_boat_number !== undefined ? { preferredBoatNumber: parsed.data.preferred_boat_number ?? null } : {}),
         },
         include: {
           bestTimes: {
             include: { distance: { select: { id: true, label: true, sortOrder: true } } },
           },
+          classification: { select: { id: true, label: true } },
+          preferredBoatModel: { select: { id: true, brand: true, name: true } },
         },
       });
       res.json({ athlete });
-    } catch {
+    } catch (err) {
+      console.error('[PATCH /athletes/:athleteId]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -163,7 +182,8 @@ export function createAthletesRouter(storage: StorageProvider): Router {
         data: { deletedAt: new Date() },
       });
       res.json({ ok: true });
-    } catch {
+    } catch (err) {
+      console.error('[DELETE /athletes/:athleteId]', err);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -203,10 +223,13 @@ export function createAthletesRouter(storage: StorageProvider): Router {
             bestTimes: {
               include: { distance: { select: { id: true, label: true, sortOrder: true } } },
             },
+            classification: { select: { id: true, label: true } },
+            preferredBoatModel: { select: { id: true, brand: true, name: true } },
           },
         });
         res.json({ athlete });
-      } catch {
+      } catch (err) {
+        console.error('[POST /athletes/:athleteId/photo]', err);
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -276,6 +299,37 @@ export function createAthletesRouter(storage: StorageProvider): Router {
       }
     }
   );
+
+  // POST /api/teams/:teamId/athletes/bulk
+  router.post('/bulk', requireRosterAccess('teamId'), async (req, res): Promise<void> => {
+    const { teamId } = req.params;
+    const parsed = BulkCreateAthletesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+      return;
+    }
+    try {
+      const created: unknown[] = [];
+      for (const a of parsed.data.athletes) {
+        const athlete = await db.athlete.create({
+          data: {
+            teamId,
+            name: a.name,
+            grade: a.grade,
+            ...(a.classificationId ? { classificationId: a.classificationId } : {}),
+            ...(a.preferred_boat_model_id ? { preferredBoatModelId: a.preferred_boat_model_id } : {}),
+            ...(a.preferred_boat_number ? { preferredBoatNumber: a.preferred_boat_number } : {}),
+          },
+          include: { classification: { select: { id: true, label: true } }, bestTimes: { include: { distance: { select: { id: true, label: true, sortOrder: true } } } }, preferredBoatModel: { select: { id: true, brand: true, name: true } } },
+        });
+        created.push(athlete);
+      }
+      res.status(201).json({ athletes: created, count: created.length });
+    } catch (err) {
+      console.error('[POST /athletes/bulk]', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
 
   return router;
 }

@@ -195,6 +195,7 @@ export function createPublishRouter(io: SocketIOServer): Router {
                 include: {
                   athlete: true,
                   lineup: { include: { team: true } },
+                  boatAssignments: { select: { boat: { select: { number: true } } } },
                 },
               },
             },
@@ -212,6 +213,7 @@ export function createPublishRouter(io: SocketIOServer): Router {
           status: r.status,
           athlete: r.entry.athlete,
           team: r.entry.lineup.team,
+          boatNumber: r.entry.boatAssignments[0]?.boat.number ?? null,
         })),
       }));
 
@@ -254,6 +256,7 @@ export function createPublishRouter(io: SocketIOServer): Router {
                 include: {
                   athlete: true,
                   lineup: { include: { team: true } },
+                  boatAssignments: { select: { boat: { select: { number: true } } } },
                 },
               },
             },
@@ -281,6 +284,7 @@ export function createPublishRouter(io: SocketIOServer): Router {
             include: {
               athlete: true,
               lineup: { include: { team: true } },
+              boatAssignments: { select: { boat: { select: { number: true } } } },
             },
           },
         },
@@ -291,6 +295,7 @@ export function createPublishRouter(io: SocketIOServer): Router {
         entryId: string;
         athleteName: string;
         teamName: string;
+        boatNumber: string | null;
         timeMs: number | null;
         status: string;
         source: 'final' | 'heat';
@@ -302,6 +307,7 @@ export function createPublishRouter(io: SocketIOServer): Router {
           entryId: r.entryId,
           athleteName: r.entry.athlete.name,
           teamName: r.entry.lineup.team.name,
+          boatNumber: r.entry.boatAssignments[0]?.boat.number ?? null,
           timeMs: r.timeMs,
           status: r.status,
           source: 'final' as const,
@@ -311,6 +317,7 @@ export function createPublishRouter(io: SocketIOServer): Router {
           entryId: r.entryId,
           athleteName: r.entry.athlete.name,
           teamName: r.entry.lineup.team.name,
+          boatNumber: r.entry.boatAssignments[0]?.boat.number ?? null,
           timeMs: r.timeMs,
           status: r.status,
           source: 'heat' as const,

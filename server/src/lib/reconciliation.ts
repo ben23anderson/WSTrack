@@ -9,6 +9,53 @@ export interface Tape {
   events: TapeEvent[];  // sorted by sequence
 }
 
+export interface RawTapeEvent {
+  entryId: string | null;
+  timeMsFromStart: number;
+  sequence: number;
+}
+
+/**
+ * Build reconciliation tapes from raw DB events.
+ * Handles split-responsibility tapes: if there is exactly one "timer tape"
+ * (all events have entryId = null) and one "order tape" (all events have
+ * entryId set) with the same event count, merges them so each position gets
+ * the timer's timestamp and the order tape's boat identity.
+ */
+export function buildTapesForReconciliation(
+  rawTapes: Array<{ officialId: string; events: RawTapeEvent[] }>
+): Tape[] {
+  const timerTapes = rawTapes.filter(
+    (t) => t.events.length > 0 && t.events.every((e) => e.entryId === null)
+  );
+  const orderTapes = rawTapes.filter(
+    (t) => t.events.length > 0 && t.events.every((e) => e.entryId !== null)
+  );
+
+  // If exactly one timer + one order tape with equal event count, merge them
+  if (timerTapes.length === 1 && orderTapes.length === 1) {
+    const timerTape = timerTapes[0];
+    const orderTape = orderTapes[0];
+    if (timerTape.events.length === orderTape.events.length) {
+      const merged: Tape = {
+        officialId: `split:${timerTape.officialId}+${orderTape.officialId}`,
+        events: orderTape.events.map((orderEv, idx) => ({
+          entryId: orderEv.entryId!,
+          timeMsFromStart: timerTape.events[idx].timeMsFromStart,
+          sequence: orderEv.sequence,
+        })),
+      };
+      return [merged];
+    }
+  }
+
+  // Default: use only tapes that have at least one identified entry
+  return orderTapes.map((t) => ({
+    officialId: t.officialId,
+    events: t.events.map((e) => ({ entryId: e.entryId!, timeMsFromStart: e.timeMsFromStart, sequence: e.sequence })),
+  }));
+}
+
 export interface ReconciliationEntry {
   entryId: string;
   timeMs: number;

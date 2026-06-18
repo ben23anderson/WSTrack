@@ -1,20 +1,28 @@
 import { apiFetch } from './client.js';
 
+export type ConflictLevel = 'none' | '2_heats' | '1_heat' | 'unavailable';
+
 export interface BoatAssignmentData {
   id: string;
   raceId: string;
   entryId: string;
   boatId: string;
   isFinalAssignment: boolean;
-  hasConflict: boolean;
-  boat: { id: string; number: string; model: string | null };
+  conflictLevel: ConflictLevel;
+  boat: { id: string; number: string; boatModelId: string | null; boatModel: { id: string; brand: string; name: string } | null };
   entry: {
     id: string;
     lineupId: string;
     athleteId: string;
     pairId: string | null;
     teamId: string;
-    athlete: { id: string; name: string };
+    athlete: {
+      id: string;
+      name: string;
+      preferredBoatModelId: string | null;
+      preferredBoatModel: { id: string; brand: string; name: string } | null;
+      preferredBoatNumber: string | null;
+    };
   };
 }
 
@@ -29,7 +37,7 @@ export interface BoatAssignmentResponse {
 export interface AutoAssignResult {
   entryId: string;
   boatId: string;
-  hasConflict: boolean;
+  conflictLevel: ConflictLevel;
 }
 
 export interface AutoAssignResponse {

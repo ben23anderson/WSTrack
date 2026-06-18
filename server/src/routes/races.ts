@@ -102,6 +102,47 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+// GET /api/race-days/:raceDayId/races/lineup-status
+router.get('/lineup-status', requireAuth, async (req, res): Promise<void> => {
+  const { raceDayId } = req.params;
+  const userId = req.session.userId!;
+  try {
+    const divisionId = await getRaceDayDivision(raceDayId);
+    if (!divisionId) { res.status(404).json({ error: 'Race day not found' }); return; }
+    if (!await isDivisionMember(userId, divisionId)) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    // Get all teams this user coaches — scope to this race day's races, not division filter
+    const coachMemberships = await db.membership.findMany({
+      where: { userId, role: 'head_coach', teamId: { not: null } },
+      select: { teamId: true },
+    });
+
+    if (coachMemberships.length === 0) {
+      res.json({ statuses: [] }); return;
+    }
+
+    const coachTeamIds = coachMemberships.map((m) => m.teamId!);
+    const races = await db.race.findMany({ where: { raceDayId }, select: { id: true } });
+    const raceIds = races.map((r) => r.id);
+
+    const lineups = await db.lineup.findMany({
+      where: { raceId: { in: raceIds }, teamId: { in: coachTeamIds } },
+      select: { raceId: true, submitted: true },
+    });
+
+    const statusMap = new Map(lineups.map((l) => [l.raceId, l.submitted]));
+    const statuses = raceIds.map((raceId) => ({
+      raceId,
+      exists: statusMap.has(raceId),
+      submitted: statusMap.get(raceId) ?? false,
+    }));
+
+    res.json({ statuses });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/race-days/:raceDayId/races/:raceId
 router.get('/:raceId', requireAuth, async (req, res): Promise<void> => {
   const { raceDayId, raceId } = req.params;
@@ -185,26 +226,66 @@ router.delete('/:raceId', requireAuth, async (req, res): Promise<void> => {
   const { raceDayId, raceId } = req.params;
   try {
     const divisionId = await getRaceDayDivision(raceDayId);
-    if (!divisionId) {
-      res.status(404).json({ error: 'Race day not found' });
-      return;
-    }
+    if (!divisionId) { res.status(404).json({ error: 'Race day not found' }); return; }
     if (!await isCoordinator(req.session.userId!, divisionId)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+      res.status(403).json({ error: 'Forbidden' }); return;
     }
     const existing = await db.race.findFirst({ where: { id: raceId, raceDayId } });
-    if (!existing) {
-      res.status(404).json({ error: 'Race not found' });
-      return;
-    }
-    if (existing.status !== 'setup') {
-      res.status(409).json({ error: 'Race can only be deleted when in setup status' });
-      return;
-    }
-    await db.race.delete({ where: { id: raceId } });
+    if (!existing) { res.status(404).json({ error: 'Race not found' }); return; }
+
+    await db.$transaction(async (tx) => {
+      const heats = await tx.heat.findMany({ where: { raceId }, select: { id: true } });
+      const heatIds = heats.map(h => h.id);
+      const finals = await tx.final.findMany({ where: { raceId }, select: { id: true } });
+      const finalIds = finals.map(f => f.id);
+
+      const tapes = await tx.officialTape.findMany({
+        where: heatIds.length || finalIds.length
+          ? { OR: [...(heatIds.length ? [{ heatId: { in: heatIds } }] : []), ...(finalIds.length ? [{ finalId: { in: finalIds } }] : [])] }
+          : { id: 'none' },
+        select: { id: true },
+      });
+      const tapeIds = tapes.map(t => t.id);
+
+      if (tapeIds.length) {
+        const fevents = await tx.finishEvent.findMany({ where: { tapeId: { in: tapeIds } }, select: { id: true } });
+        const feventIds = fevents.map(e => e.id);
+        if (feventIds.length) await tx.disagreeEvent.deleteMany({ where: { finishEventId: { in: feventIds } } });
+        await tx.finishEvent.deleteMany({ where: { tapeId: { in: tapeIds } } });
+        await tx.officialTape.deleteMany({ where: { id: { in: tapeIds } } });
+      }
+
+      const lineups = await tx.lineup.findMany({ where: { raceId }, select: { id: true } });
+      const lineupIds = lineups.map(l => l.id);
+      const entries = lineupIds.length
+        ? await tx.lineupEntry.findMany({ where: { lineupId: { in: lineupIds } }, select: { id: true } })
+        : [];
+      const entryIds = entries.map(e => e.id);
+
+      if (heatIds.length) await tx.result.deleteMany({ where: { heatId: { in: heatIds } } });
+      if (finalIds.length) await tx.result.deleteMany({ where: { finalId: { in: finalIds } } });
+      if (entryIds.length) {
+        await tx.result.deleteMany({ where: { entryId: { in: entryIds } } });
+        await tx.laneAssignment.deleteMany({ where: { entryId: { in: entryIds } } });
+      }
+      if (heatIds.length) await tx.laneAssignment.deleteMany({ where: { heatId: { in: heatIds } } });
+      if (finalIds.length) await tx.laneAssignment.deleteMany({ where: { finalId: { in: finalIds } } });
+
+      await tx.boatAssignment.deleteMany({ where: { raceId } });
+      if (lineupIds.length) await tx.lineupEntry.deleteMany({ where: { lineupId: { in: lineupIds } } });
+      await tx.lineup.deleteMany({ where: { raceId } });
+      await tx.substitution.deleteMany({ where: { raceId } });
+      await tx.scratch.deleteMany({ where: { raceId } });
+      await tx.boatLoan.deleteMany({ where: { raceId } });
+      if (heatIds.length) await tx.heat.deleteMany({ where: { raceId } });
+      if (finalIds.length) await tx.final.deleteMany({ where: { raceId } });
+
+      await tx.race.delete({ where: { id: raceId } });
+    });
+
     res.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error('[DELETE /races/:raceId]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout.js';
+import PageNav from '../components/PageNav.js';
+import type { NavCrumb } from '../components/PageNav.js';
 import { useAuthContext } from '../context/AuthContext.js';
 import { ApiError } from '../api/client.js';
 import {
@@ -143,12 +145,27 @@ export default function ReviewPage() {
   const queryClient = useQueryClient();
   const [reconcilePreview, setReconcilePreview] = useState<ReconciliationEntry[] | null>(null);
   const [reconcileAllAgreed, setReconcileAllAgreed] = useState<boolean | null>(null);
+  const [reconcileSaved, setReconcileSaved] = useState(false);
   const [actionError, setActionError] = useState('');
   const [finalizeSuccess, setFinalizeSuccess] = useState(false);
 
+  const searchParams = new URLSearchParams(window.location.search);
+  const raceIdParam = searchParams.get('raceId');
+  const raceDayIdParam = searchParams.get('raceDayId');
+
   const isOfficial = memberships.some((m) => m.role === 'official' || m.role === 'coordinator');
-  // Simplification: treat any official/coordinator as potential primary official for UI
   const isPrimary = isOfficial;
+
+  // Build breadcrumb nav
+  const crumbs: NavCrumb[] = [];
+  if (raceDayIdParam) crumbs.push({ label: 'Race Day', to: `/race-days/${raceDayIdParam}` });
+  if (raceIdParam) crumbs.push({ label: 'Race', to: `/races/${raceIdParam}` });
+  if (raceIdParam) {
+    crumbs.push({
+      label: 'Heat Sheet',
+      to: `/races/${raceIdParam}/heats${raceDayIdParam ? `?raceDayId=${raceDayIdParam}` : ''}`,
+    });
+  }
 
   const resultsQuery = useQuery<{ results: ResultData[] }, ApiError>({
     queryKey: ['heat-results', heatId],
@@ -171,10 +188,14 @@ export default function ReviewPage() {
     onSuccess: (data) => {
       setReconcilePreview(data.entries);
       setReconcileAllAgreed(data.all_agreed);
-      void queryClient.invalidateQueries({ queryKey: ['heat-results', heatId] });
+      setReconcileSaved(true);
+      void resultsQuery.refetch();
       setActionError('');
     },
-    onError: (err: ApiError) => setActionError(err.message),
+    onError: (err: ApiError) => {
+      setReconcileSaved(false);
+      setActionError(err.message);
+    },
   });
 
   const finalizeMutation = useMutation({
@@ -192,12 +213,9 @@ export default function ReviewPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Link to={`/races`} className="text-blue-600 hover:text-blue-800 text-sm">
-            ← Back
-          </Link>
-        </div>
+        {/* Nav */}
+        <PageNav crumbs={crumbs} />
+
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Heat Review</h1>
           <p className="text-sm text-gray-500 mt-1">Heat ID: {heatId}</p>
@@ -215,20 +233,26 @@ export default function ReviewPage() {
             <h2 className="font-semibold text-gray-800">Reconciliation</h2>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => previewMutation.mutate()}
-                disabled={previewMutation.isPending}
+                onClick={() => { setReconcileSaved(false); previewMutation.mutate(); }}
+                disabled={previewMutation.isPending || saveMutation.isPending}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors disabled:opacity-60"
               >
-                {previewMutation.isPending ? 'Previewing…' : 'Preview Reconciliation'}
+                {previewMutation.isPending ? 'Previewing…' : 'Preview (no save)'}
               </button>
               <button
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors disabled:opacity-60"
+                onClick={() => { setReconcileSaved(false); saveMutation.mutate(); }}
+                disabled={saveMutation.isPending || previewMutation.isPending}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm min-h-11 transition-colors disabled:opacity-60"
               >
-                {saveMutation.isPending ? 'Applying…' : 'Apply & Save Reconciliation'}
+                {saveMutation.isPending ? 'Saving…' : '✓ Reconcile & Save Results'}
               </button>
             </div>
+
+            {reconcileSaved && (
+              <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg px-3 py-2 text-sm font-medium">
+                Results saved to database. See the Results section below.
+              </div>
+            )}
 
             {reconcilePreview && (
               <div className="space-y-2">
@@ -237,7 +261,9 @@ export default function ReviewPage() {
                     ? 'bg-green-50 text-green-700 border border-green-200'
                     : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
                 }`}>
-                  {reconcileAllAgreed ? 'All officials agreed — no conflicts.' : 'Some entries need review (conflicts detected).'}
+                  {reconcileAllAgreed
+                    ? 'All officials agreed — no conflicts.'
+                    : 'Some entries need review (conflicts detected).'}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -283,8 +309,14 @@ export default function ReviewPage() {
             <div className="flex justify-center py-8">
               <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : resultsQuery.isError ? (
+            <p className="px-4 py-4 text-sm text-red-500">
+              Error loading results: {(resultsQuery.error as ApiError).message}
+            </p>
           ) : !hasResults ? (
-            <p className="px-4 py-4 text-sm text-gray-400">No results recorded yet.</p>
+            <p className="px-4 py-4 text-sm text-gray-400">
+              No results yet — use "Reconcile &amp; Save Results" above to generate results from official tapes.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -313,7 +345,7 @@ export default function ReviewPage() {
           )}
         </section>
 
-        {/* Finalize button */}
+        {/* Finalize */}
         {isPrimary && (
           <section>
             {finalizeSuccess ? (
@@ -321,17 +353,24 @@ export default function ReviewPage() {
                 Heat finalized successfully.
               </div>
             ) : (
-              <button
-                onClick={() => {
-                  if (confirm('Finalize this heat? This marks results as complete.')) {
-                    finalizeMutation.mutate();
-                  }
-                }}
-                disabled={finalizeMutation.isPending || !hasResults}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold rounded-xl px-4 py-3 text-sm min-h-11 transition-colors"
-              >
-                {finalizeMutation.isPending ? 'Finalizing…' : 'Finalize Heat'}
-              </button>
+              <div className="space-y-2">
+                {!hasResults && (
+                  <p className="text-xs text-gray-400">
+                    Apply reconciliation above to generate results before finalizing.
+                  </p>
+                )}
+                <button
+                  onClick={() => {
+                    if (confirm('Finalize this heat? This marks results as complete.')) {
+                      finalizeMutation.mutate();
+                    }
+                  }}
+                  disabled={finalizeMutation.isPending}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold rounded-xl px-4 py-3 text-sm min-h-11 transition-colors"
+                >
+                  {finalizeMutation.isPending ? 'Finalizing…' : 'Finalize Heat'}
+                </button>
+              </div>
             )}
           </section>
         )}

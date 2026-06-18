@@ -3,7 +3,7 @@ import { apiFetch } from './client.js';
 export interface RaceData {
   id: string;
   raceDayId: string;
-  classificationId: string;
+  classificationId: string | null;
   distanceId: string;
   laneCount: number;
   orderIndex: number;
@@ -13,7 +13,7 @@ export interface RaceData {
   finalBRule: Record<string, unknown> | null;
   status: string;
   createdAt: string;
-  classification: { id: string; label: string; isDoubles: boolean };
+  classification: { id: string; label: string; isDoubles: boolean } | null;
   distance: { id: string; label: string };
 }
 
@@ -32,7 +32,7 @@ export async function listRaces(raceDayId: string): Promise<RacesResponse> {
 export async function createRace(
   raceDayId: string,
   data: {
-    classification_id: string;
+    classification_id?: string;
     distance_id: string;
     lane_count?: number;
     order_index: number;
@@ -77,4 +77,8 @@ export async function deleteRace(raceDayId: string, raceId: string): Promise<{ o
   return apiFetch<{ ok: boolean }>(`/race-days/${raceDayId}/races/${raceId}`, {
     method: 'DELETE',
   });
+}
+
+export async function getRaceInfo(raceId: string): Promise<RaceResponse> {
+  return apiFetch<RaceResponse>(`/races/${raceId}`);
 }

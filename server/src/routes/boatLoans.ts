@@ -2,9 +2,22 @@ import { Router } from 'express';
 import db from '../lib/db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { CreateBoatLoanSchema } from '../lib/validation.js';
-import { getNextRaceId } from '../lib/boatConflict.js';
 
 const router = Router({ mergeParams: true });
+
+async function getNextRaceId(raceId: string): Promise<string | null> {
+  const race = await db.race.findUnique({
+    where: { id: raceId },
+    select: { raceDayId: true, orderIndex: true },
+  });
+  if (!race) return null;
+  const next = await db.race.findFirst({
+    where: { raceDayId: race.raceDayId, orderIndex: { gt: race.orderIndex } },
+    orderBy: { orderIndex: 'asc' },
+    select: { id: true },
+  });
+  return next?.id ?? null;
+}
 
 // GET /api/races/:raceId/boat-loans
 // List loans for this race
@@ -34,7 +47,7 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
     const loans = await db.boatLoan.findMany({
       where: { raceId },
       include: {
-        boat: { select: { id: true, number: true, model: true } },
+        boat: { select: { id: true, number: true, boatModelId: true, boatModel: { select: { id: true, brand: true, name: true } } } },
         fromTeam: { select: { id: true, name: true } },
         toTeam: { select: { id: true, name: true } },
       },
@@ -126,7 +139,7 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
         raceId,
       },
       include: {
-        boat: { select: { id: true, number: true, model: true } },
+        boat: { select: { id: true, number: true, boatModelId: true, boatModel: { select: { id: true, brand: true, name: true } } } },
         fromTeam: { select: { id: true, name: true } },
         toTeam: { select: { id: true, name: true } },
       },

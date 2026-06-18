@@ -58,3 +58,32 @@ export async function createTeam(
 export async function getTeams(divisionId: string): Promise<TeamsResponse> {
   return apiFetch<TeamsResponse>(`/divisions/${divisionId}/teams`);
 }
+
+export interface OfficialSummary {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface OfficialsResponse {
+  officials: OfficialSummary[];
+}
+
+export async function getDivisionOfficials(divisionId: string): Promise<OfficialsResponse> {
+  return apiFetch<OfficialsResponse>(`/divisions/${divisionId}/officials`);
+}
+
+export interface ClassificationSummary {
+  id: string;
+  label: string;
+  isDoubles: boolean;
+  sortOrder: number;
+}
+
+export interface ClassificationsResponse {
+  classifications: ClassificationSummary[];
+}
+
+export async function getDivisionClassifications(divisionId: string): Promise<ClassificationsResponse> {
+  return apiFetch<ClassificationsResponse>(`/divisions/${divisionId}/classifications`);
+}

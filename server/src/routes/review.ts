@@ -3,8 +3,7 @@ import type { Server as SocketIOServer } from 'socket.io';
 import db from '../lib/db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { AdjustResultSchema, ReconcileHeatSchema } from '../lib/validation.js';
-import { reconcileTapes } from '../lib/reconciliation.js';
-import type { Tape } from '../lib/reconciliation.js';
+import { reconcileTapes, buildTapesForReconciliation } from '../lib/reconciliation.js';
 
 /** @private */
 async function getHeatRaceDay(
@@ -102,8 +101,10 @@ export function createReviewRouter(io: SocketIOServer): Router {
       });
 
       res.json({ results });
-    } catch {
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (err) {
+      console.error('[getHeatResults]', err);
+      const msg = err instanceof Error ? err.message : 'Internal server error';
+      res.status(500).json({ error: msg });
     }
   });
 
@@ -139,16 +140,16 @@ export function createReviewRouter(io: SocketIOServer): Router {
         include: { finishEvents: { orderBy: { sequence: 'asc' } } },
       });
 
-      const reconcileTapeInput: Tape[] = tapes.map((t) => ({
-        officialId: t.officialId,
-        events: t.finishEvents
-          .filter((e) => e.entryId !== null)
-          .map((e) => ({
-            entryId: e.entryId!,
+      const reconcileTapeInput = buildTapesForReconciliation(
+        tapes.map((t) => ({
+          officialId: t.officialId,
+          events: t.finishEvents.map((e) => ({
+            entryId: e.entryId,
             timeMsFromStart: Number(e.clientFinishTs) - startTs.getTime(),
             sequence: e.sequence,
           })),
-      }));
+        }))
+      );
 
       const dnsDqResults = await db.result.findMany({
         where: { heatId, status: { in: ['dns', 'dq'] } },
@@ -160,39 +161,39 @@ export function createReviewRouter(io: SocketIOServer): Router {
       const entries = reconcileTapes(reconcileTapeInput, dnsDqMap);
 
       if (parsed.data.save) {
-        await db.$transaction(async (tx) => {
-          for (const entry of entries) {
-            const existing = await tx.result.findFirst({
-              where: { entryId: entry.entryId, heatId },
+        for (const entry of entries) {
+          const existing = await db.result.findFirst({
+            where: { entryId: entry.entryId, heatId },
+          });
+          if (existing) {
+            await db.result.update({
+              where: { id: existing.id },
+              data: {
+                place: entry.place,
+                timeMs: entry.timeMs,
+                status: 'ok',
+              },
             });
-            if (existing) {
-              await tx.result.update({
-                where: { id: existing.id },
-                data: {
-                  place: entry.place,
-                  timeMs: entry.timeMs,
-                  status: 'ok',
-                },
-              });
-            } else {
-              await tx.result.create({
-                data: {
-                  entryId: entry.entryId,
-                  heatId,
-                  place: entry.place,
-                  timeMs: entry.timeMs,
-                  status: 'ok',
-                },
-              });
-            }
+          } else {
+            await db.result.create({
+              data: {
+                entryId: entry.entryId,
+                heatId,
+                place: entry.place,
+                timeMs: entry.timeMs,
+                status: 'ok',
+              },
+            });
           }
-        });
+        }
       }
 
       const all_agreed = entries.every((e) => e.status === 'ok');
       res.json({ entries, all_agreed });
-    } catch {
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (err) {
+      console.error('[reconcile]', err);
+      const msg = err instanceof Error ? err.message : 'Internal server error';
+      res.status(500).json({ error: msg });
     }
   });
 
@@ -201,7 +202,7 @@ export function createReviewRouter(io: SocketIOServer): Router {
     const { heatId, resultId } = req.params;
     const userId = req.session.userId!;
     try {
-      if (!await isPrimaryOfficial(userId, heatId)) {
+      if (!await isPrimaryOfficialOrCoordinator(userId, heatId)) {
         res.status(403).json({ error: 'Forbidden: primary official only' });
         return;
       }
@@ -241,7 +242,7 @@ export function createReviewRouter(io: SocketIOServer): Router {
     const { heatId } = req.params;
     const userId = req.session.userId!;
     try {
-      if (!await isPrimaryOfficial(userId, heatId)) {
+      if (!await isPrimaryOfficialOrCoordinator(userId, heatId)) {
         res.status(403).json({ error: 'Forbidden: primary official only' });
         return;
       }

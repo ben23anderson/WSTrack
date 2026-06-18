@@ -203,7 +203,7 @@ export function createFinalReviewRouter(io: SocketIOServer): Router {
     const { finalId, resultId } = req.params;
     const userId = req.session.userId!;
     try {
-      if (!await isPrimaryOfficial(userId, finalId)) {
+      if (!await isPrimaryOfficialOrCoordinator(userId, finalId)) {
         res.status(403).json({ error: 'Forbidden: primary official only' });
         return;
       }
@@ -243,7 +243,7 @@ export function createFinalReviewRouter(io: SocketIOServer): Router {
     const { finalId } = req.params;
     const userId = req.session.userId!;
     try {
-      if (!await isPrimaryOfficial(userId, finalId)) {
+      if (!await isPrimaryOfficialOrCoordinator(userId, finalId)) {
         res.status(403).json({ error: 'Forbidden: primary official only' });
         return;
       }
